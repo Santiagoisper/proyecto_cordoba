@@ -1,0 +1,24 @@
+{
+  "name": "Córdoba Viáticos",
+  "short_name": "Viáticos",
+  "description": "Gestión de viáticos para pacientes en ensayos clínicos",
+  "start_url": "/expenses/new/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1e40af",
+  "icons": [
+    {
+      "src": "/static/img/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/img/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
