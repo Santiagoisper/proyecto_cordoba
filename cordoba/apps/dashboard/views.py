@@ -127,6 +127,10 @@ def _coordinator_context(user):
             'cargado_count': sum(1 for v in group_list if v.comprobante_status == 'cargado'),
         })
 
+    visits_sin_comprobante = sum(
+        1 for v in visit_rows if v.comprobante_status == 'sin_comprobante'
+    )
+
     return {
         'pending_count': pending_qs.count(),
         'observed_count': observed_qs.count(),
@@ -136,6 +140,7 @@ def _coordinator_context(user):
         'rejected_today': Expense.objects.filter(
             status='rejected', reviewed_by=user, reviewed_at__date=today
         ).count(),
+        'visits_sin_comprobante': visits_sin_comprobante,
         'pending_with_alerts': pending_with_alerts,
         'observed_expenses': list(observed_qs[:10]),
         'visits_by_protocol': visits_by_protocol,
