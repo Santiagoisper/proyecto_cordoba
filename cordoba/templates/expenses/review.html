@@ -31,10 +31,26 @@
       <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sticky top-4">
         <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Ticket original</h2>
         {% if ticket and ticket.file %}
-        <img src="{{ ticket.file.url }}" alt="Ticket"
-             class="w-full rounded-lg object-contain max-h-80 bg-slate-50 border border-slate-100"
-             onclick="this.classList.toggle('max-h-80')" style="cursor:zoom-in" />
-        <p class="text-xs text-slate-400 text-center mt-2">Tocá para ampliar</p>
+          {% if ticket.mime_type == 'application/pdf' or ticket.original_filename|lower|slice:"-4:" == '.pdf' %}
+          <!-- Preview PDF -->
+          <div class="flex items-center gap-3 bg-red-50 border border-red-100 rounded-lg px-4 py-4 mb-2">
+            <i data-lucide="file-text" class="h-8 w-8 text-red-500 shrink-0"></i>
+            <div>
+              <p class="text-sm font-medium text-slate-700">{{ ticket.original_filename|default:"ticket.pdf" }}</p>
+              <p class="text-xs text-slate-500">Comprobante en PDF</p>
+            </div>
+          </div>
+          <a href="{{ ticket.file.url }}" target="_blank" rel="noopener"
+             class="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-800 font-medium">
+            <i data-lucide="external-link" class="h-3 w-3"></i>Abrir PDF
+          </a>
+          {% else %}
+          <!-- Preview imagen -->
+          <img src="{{ ticket.file.url }}" alt="Ticket"
+               class="w-full rounded-lg object-contain max-h-80 bg-slate-50 border border-slate-100"
+               onclick="this.classList.toggle('max-h-80')" style="cursor:zoom-in" />
+          <p class="text-xs text-slate-400 text-center mt-2">Tocá para ampliar</p>
+          {% endif %}
         {% else %}
         <div class="flex items-center justify-center h-40 bg-slate-50 rounded-lg border border-dashed border-slate-200">
           <div class="text-center">

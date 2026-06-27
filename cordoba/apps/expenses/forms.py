@@ -31,10 +31,10 @@ class ExpenseCreateForm(forms.Form):
         }),
         initial=timezone.now().date,
     )
-    ticket_file = forms.ImageField(
-        label='Foto del ticket',
+    ticket_file = forms.FileField(
+        label='Foto o PDF del ticket',
         widget=forms.FileInput(attrs={
-            'accept': 'image/*',
+            'accept': 'image/*,application/pdf',
             'capture': 'environment',
             'class': 'hidden',
             'id': 'ticket-file-input',

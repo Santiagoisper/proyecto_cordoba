@@ -148,7 +148,7 @@ class TicketFile(models.Model):
     expense = models.ForeignKey(
         Expense, on_delete=models.CASCADE, related_name='ticket_files'
     )
-    file = models.ImageField(upload_to='tickets/%Y/%m/', help_text="Foto o scan del ticket")
+    file = models.FileField(upload_to='tickets/%Y/%m/', help_text="Foto o scan del ticket (imagen o PDF)")
     original_filename = models.CharField(max_length=255, blank=True)
     file_size = models.PositiveIntegerField(null=True, blank=True, help_text="Tamaño en bytes")
     mime_type = models.CharField(max_length=100, blank=True)

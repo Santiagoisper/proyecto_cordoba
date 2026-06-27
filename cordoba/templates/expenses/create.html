@@ -129,24 +129,33 @@
         Foto del ticket
       </h2>
 
-      <!-- Preview de imagen -->
-      <div id="image-preview-container" class="hidden mb-4">
+      <!-- Preview de archivo seleccionado -->
+      <div id="file-preview-container" class="hidden mb-4">
+        <!-- Preview imagen -->
         <img id="image-preview" src="" alt="Preview del ticket"
-             class="w-full max-h-64 object-contain rounded-lg border border-slate-200 bg-slate-50" />
-        <button type="button" onclick="clearImage()"
+             class="hidden w-full max-h-64 object-contain rounded-lg border border-slate-200 bg-slate-50" />
+        <!-- Preview PDF -->
+        <div id="pdf-preview" class="hidden items-center gap-3 bg-slate-50 rounded-lg border border-slate-200 px-4 py-4">
+          <i data-lucide="file-text" class="h-8 w-8 text-red-500 shrink-0"></i>
+          <div>
+            <p id="pdf-filename" class="text-sm font-medium text-slate-700"></p>
+            <p class="text-xs text-slate-400">PDF seleccionado</p>
+          </div>
+        </div>
+        <button type="button" onclick="clearFile()"
                 class="mt-2 text-xs text-slate-500 hover:text-red-600 flex items-center gap-1">
-          <i data-lucide="x" class="h-3 w-3"></i>Cambiar foto
+          <i data-lucide="x" class="h-3 w-3"></i>Cambiar archivo
         </button>
       </div>
 
-      <!-- Input de archivo -->
+      <!-- Input de archivo (imagen + PDF) -->
       <input type="file" name="ticket_file" id="ticket-file-input"
-             accept="image/*" capture="environment"
+             accept="image/*,application/pdf" capture="environment"
              class="hidden"
-             onchange="previewImage(this)" required />
+             onchange="previewFile(this)" required />
 
       <div id="upload-placeholder">
-        <!-- Botón cámara (mobile) -->
+        <!-- Botón cámara/archivo (mobile) -->
         <button type="button"
                 onclick="document.getElementById('ticket-file-input').click()"
                 class="w-full flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-300 hover:border-primary-400 rounded-xl py-8 px-4 transition-colors cursor-pointer bg-slate-50 hover:bg-primary-50">
@@ -154,8 +163,8 @@
             <i data-lucide="camera" class="h-6 w-6 text-primary-600"></i>
           </div>
           <div class="text-center">
-            <p class="text-sm font-medium text-slate-700">Tomar foto o subir imagen</p>
-            <p class="text-xs text-slate-400 mt-1">JPG, PNG, HEIC — Máx. 10 MB</p>
+            <p class="text-sm font-medium text-slate-700">Tomar foto, subir imagen o PDF</p>
+            <p class="text-xs text-slate-400 mt-1">JPG, PNG, HEIC, PDF — Máx. 10 MB</p>
           </div>
         </button>
       </div>
@@ -187,22 +196,37 @@
 
 {% block extra_js %}
 <script>
-function previewImage(input) {
-  if (input.files && input.files[0]) {
+function previewFile(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  const container = document.getElementById('file-preview-container');
+  const imgEl = document.getElementById('image-preview');
+  const pdfEl = document.getElementById('pdf-preview');
+  const pdfName = document.getElementById('pdf-filename');
+
+  container.classList.remove('hidden');
+  document.getElementById('upload-placeholder').classList.add('hidden');
+
+  if (isPdf) {
+    imgEl.classList.add('hidden');
+    pdfEl.classList.remove('hidden');
+    pdfEl.classList.add('flex');
+    pdfName.textContent = file.name;
+  } else {
+    pdfEl.classList.add('hidden');
+    pdfEl.classList.remove('flex');
+    imgEl.classList.remove('hidden');
     const reader = new FileReader();
-    reader.onload = function(e) {
-      document.getElementById('image-preview').src = e.target.result;
-      document.getElementById('image-preview-container').classList.remove('hidden');
-      document.getElementById('upload-placeholder').classList.add('hidden');
-    };
-    reader.readAsDataURL(input.files[0]);
+    reader.onload = function(e) { imgEl.src = e.target.result; };
+    reader.readAsDataURL(file);
   }
 }
 
-function clearImage() {
+function clearFile() {
   document.getElementById('ticket-file-input').value = '';
   document.getElementById('image-preview').src = '';
-  document.getElementById('image-preview-container').classList.add('hidden');
+  document.getElementById('file-preview-container').classList.add('hidden');
   document.getElementById('upload-placeholder').classList.remove('hidden');
 }
 
