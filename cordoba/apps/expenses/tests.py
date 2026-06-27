@@ -11,7 +11,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.protocols.models import Protocol, VisitType
+from apps.protocols.models import Protocol, Site, VisitType
 from apps.patients.models import Patient, Visit
 from .models import Expense, ExpensePeriod, AuditLog
 from .services import close_period, ExpenseValidationService
@@ -423,3 +423,114 @@ class ClosedPeriodImmutabilityTest(BaseExpenseTestCase):
         with self.assertRaises(ValueError) as ctx:
             close_period(self.closed_period.pk, self.coordinator)
         self.assertIn('cerrado', str(ctx.exception).lower())
+
+
+# ─── Multisite IDOR isolation ──────────────────────────────────────────────────
+
+class MultisiteIsolationTest(TestCase):
+    """
+    Coordinador de site_a NO puede ver ni mutar objetos de site_b.
+    Protección IDOR: todas las respuestas deben ser 403 o 404.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        Group.objects.get_or_create(name='coordinator')
+
+        cls.site_a = Site.objects.create(code='SITE-A', name='Centro A')
+        cls.site_b = Site.objects.create(code='SITE-B', name='Centro B')
+
+        cls.coord_a = User.objects.create_user(username='coord_a', password='pass')
+        cls.coord_a.groups.add(Group.objects.get(name='coordinator'))
+        cls.coord_a.site = cls.site_a
+        cls.coord_a.save()
+
+        cls.coord_b = User.objects.create_user(username='coord_b', password='pass')
+        cls.coord_b.groups.add(Group.objects.get(name='coordinator'))
+        cls.coord_b.site = cls.site_b
+        cls.coord_b.save()
+
+        cls.protocol_b = Protocol.objects.create(
+            code='PROT-B-01',
+            name='Protocolo del site B',
+            site=cls.site_b,
+            max_daily_meals=Decimal('2000.00'),
+            max_daily_transport=Decimal('3000.00'),
+            max_daily_accommodation=Decimal('10000.00'),
+            created_by=cls.coord_b,
+        )
+        cls.visit_type_b = VisitType.objects.create(
+            protocol=cls.protocol_b,
+            name='Visita B1',
+            code='VB1',
+            window_before_days=3,
+            window_after_days=3,
+        )
+        cls.patient_b = Patient.objects.create(
+            protocol=cls.protocol_b,
+            patient_code='B01-001',
+            created_by=cls.coord_b,
+        )
+        cls.visit_b = Visit.objects.create(
+            patient=cls.patient_b,
+            visit_type=cls.visit_type_b,
+            scheduled_date=date(2025, 3, 15),
+            created_by=cls.coord_b,
+        )
+        cls.period_b = ExpensePeriod.objects.create(
+            protocol=cls.protocol_b,
+            name='Q1 2025 B',
+            date_from=date(2025, 1, 1),
+            date_to=date(2025, 3, 31),
+            created_by=cls.coord_b,
+        )
+        cls.expense_b = Expense.objects.create(
+            visit=cls.visit_b,
+            category='transport',
+            amount=Decimal('500.00'),
+            expense_date=date(2025, 3, 15),
+            description='Taxi',
+            status='pending_review',
+            submitted_by=cls.coord_b,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.coord_a)
+
+    def test_coord_a_cannot_view_expense_detail_from_site_b(self):
+        """expense_detail retorna 404 para coordinador de otro site."""
+        url = reverse('expenses:detail', kwargs={'pk': self.expense_b.pk})
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_coord_a_cannot_approve_expense_from_site_b(self):
+        """approve_expense retorna 404 para gasto de otro site."""
+        url = reverse('expenses:approve', kwargs={'pk': self.expense_b.pk})
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_coord_a_cannot_reject_expense_from_site_b(self):
+        """reject_expense retorna 404 para gasto de otro site."""
+        url = reverse('expenses:reject', kwargs={'pk': self.expense_b.pk})
+        resp = self.client.post(url, {'notes': 'intento cruzado'})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_coord_a_cannot_observe_expense_from_site_b(self):
+        """observe_expense retorna 404 para gasto de otro site."""
+        url = reverse('expenses:observe', kwargs={'pk': self.expense_b.pk})
+        resp = self.client.post(url, {'notes': 'intento cruzado'})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_coord_a_cannot_close_period_from_site_b(self):
+        """close_period_view retorna 404 para período de otro site."""
+        url = reverse('periods:close', kwargs={'pk': self.period_b.pk})
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_period_list_excludes_site_b_periods(self):
+        """period_list no muestra períodos de otro site."""
+        url = reverse('periods:list')
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, self.period_b.name)

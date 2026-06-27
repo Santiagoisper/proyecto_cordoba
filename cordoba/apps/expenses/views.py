@@ -49,6 +49,29 @@ def _period_locked_response(expense):
     return None
 
 
+def _site_scope_expenses(user, qs):
+    """
+    Restringe el QuerySet de Expense al site del usuario cuando:
+    - el usuario NO es superuser ni site_admin, Y
+    - el usuario tiene site_id seteado.
+    Protección IDOR: coordinadores solo ven gastos de su propio site.
+    """
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        qs = qs.filter(visit__patient__protocol__site_id=user.site_id)
+    return qs
+
+
+def _site_scope_periods(user, qs):
+    """
+    Restringe el QuerySet de ExpensePeriod al site del usuario cuando:
+    - el usuario NO es superuser ni site_admin, Y
+    - el usuario tiene site_id seteado.
+    """
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        qs = qs.filter(protocol__site_id=user.site_id)
+    return qs
+
+
 # ─── Expense list ─────────────────────────────────────────────────────────────
 
 @login_required
@@ -148,7 +171,10 @@ def expense_create(request):
 def expense_review(request, pk):
     """Revisión OCR: muestra campos extraídos con badges de confianza."""
     expense = get_object_or_404(
-        Expense.objects.select_related('visit__patient__protocol', 'visit__visit_type', 'period'),
+        _site_scope_expenses(
+            request.user,
+            Expense.objects.select_related('visit__patient__protocol', 'visit__visit_type', 'period'),
+        ),
         pk=pk,
     )
 
@@ -221,10 +247,13 @@ def expense_detail(request, pk):
     Accesible para el asistente que lo cargó y para coordinadores/admins.
     """
     expense = get_object_or_404(
-        Expense.objects.select_related(
-            'visit__patient__protocol', 'visit__visit_type',
-            'submitted_by', 'reviewed_by', 'period'
-        ).prefetch_related('ticket_files'),
+        _site_scope_expenses(
+            request.user,
+            Expense.objects.select_related(
+                'visit__patient__protocol', 'visit__visit_type',
+                'submitted_by', 'reviewed_by', 'period'
+            ).prefetch_related('ticket_files'),
+        ),
         pk=pk,
     )
 
@@ -256,7 +285,8 @@ def expense_correct(request, pk):
     Permite al asistente corregir un gasto 'observed' y reenviarlo a revisión.
     """
     expense = get_object_or_404(
-        Expense.objects.select_related('period'), pk=pk, status='observed'
+        _site_scope_expenses(request.user, Expense.objects.select_related('period')),
+        pk=pk, status='observed',
     )
 
     if not (request.user == expense.submitted_by or _can_coordinate(request.user)):
@@ -309,7 +339,8 @@ def approve_expense(request, pk):
         return HttpResponseForbidden("No tenés permiso para aprobar gastos.")
 
     expense = get_object_or_404(
-        Expense.objects.select_related('period'), pk=pk, status='pending_review'
+        _site_scope_expenses(request.user, Expense.objects.select_related('period')),
+        pk=pk, status='pending_review',
     )
     lock_response = _period_locked_response(expense)
     if lock_response:
@@ -347,7 +378,8 @@ def reject_expense(request, pk):
         return HttpResponseForbidden("No tenés permiso para rechazar gastos.")
 
     expense = get_object_or_404(
-        Expense.objects.select_related('period'), pk=pk, status='pending_review'
+        _site_scope_expenses(request.user, Expense.objects.select_related('period')),
+        pk=pk, status='pending_review',
     )
     lock_response = _period_locked_response(expense)
     if lock_response:
@@ -391,7 +423,8 @@ def observe_expense(request, pk):
         return HttpResponseForbidden("No tenés permiso para observar gastos.")
 
     expense = get_object_or_404(
-        Expense.objects.select_related('period'), pk=pk, status='pending_review'
+        _site_scope_expenses(request.user, Expense.objects.select_related('period')),
+        pk=pk, status='pending_review',
     )
     lock_response = _period_locked_response(expense)
     if lock_response:
@@ -434,7 +467,9 @@ def action_modal(request, pk, action):
     if not _can_coordinate(request.user):
         return HttpResponseForbidden()
 
-    expense = get_object_or_404(Expense, pk=pk)
+    expense = get_object_or_404(
+        _site_scope_expenses(request.user, Expense.objects.all()), pk=pk
+    )
     return render(request, 'expenses/partials/action_modal.html', {
         'expense': expense,
         'action': action,
@@ -498,6 +533,10 @@ def close_period_view(request, pk):
     """
     if not _can_coordinate(request.user):
         return HttpResponseForbidden("No tenés permiso para cerrar períodos.")
+
+    get_object_or_404(
+        _site_scope_periods(request.user, ExpensePeriod.objects.all()), pk=pk
+    )
 
     try:
         period = close_period_service(pk, request.user)
