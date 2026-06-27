@@ -108,9 +108,26 @@ def expense_create(request):
     Wizard de carga: protocolo → paciente (HTMX) → visita (HTMX) + foto.
     POST: crea el Expense con status ocr_pending y lanza OCR.
     """
+    user = request.user
     protocols = Protocol.objects.filter(is_active=True).order_by('code')
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        protocols = protocols.filter(site_id=user.site_id)
 
     if request.method == 'POST':
+        if not user.is_superuser and not user.is_site_admin and user.site_id:
+            raw_visit_id = request.POST.get('visit', '').strip()
+            if raw_visit_id and raw_visit_id.isdigit():
+                cross_site = (
+                    Visit.objects.select_related('patient__protocol')
+                    .filter(pk=raw_visit_id)
+                    .exclude(patient__protocol__site_id=user.site_id)
+                    .exists()
+                )
+                if cross_site:
+                    return HttpResponseForbidden(
+                        "No tenés permiso para cargar gastos en este protocolo."
+                    )
+
         form = ExpenseCreateForm(request.POST, request.FILES)
         if form.is_valid():
             visit_id = form.cleaned_data['visit']
@@ -594,6 +611,13 @@ def htmx_patients_for_protocol(request):
     protocol_id = request.GET.get('protocol') or request.GET.get('protocol_id')
     patients = []
     if protocol_id:
+        user = request.user
+        if not user.is_superuser and not user.is_site_admin and user.site_id:
+            protocol = Protocol.objects.filter(
+                pk=protocol_id, site_id=user.site_id
+            ).first()
+            if not protocol:
+                return render(request, 'expenses/partials/patient_options.html', {'patients': []})
         patients = Patient.objects.filter(
             protocol_id=protocol_id, is_active=True
         ).order_by('patient_code')
@@ -606,6 +630,13 @@ def htmx_visits_for_patient(request):
     patient_id = request.GET.get('patient') or request.GET.get('patient_id')
     visits = []
     if patient_id:
+        user = request.user
+        if not user.is_superuser and not user.is_site_admin and user.site_id:
+            patient = Patient.objects.select_related('protocol').filter(
+                pk=patient_id, protocol__site_id=user.site_id
+            ).first()
+            if not patient:
+                return render(request, 'expenses/partials/visit_options.html', {'visits': []})
         visits = Visit.objects.filter(
             patient_id=patient_id
         ).select_related('visit_type').order_by('scheduled_date')

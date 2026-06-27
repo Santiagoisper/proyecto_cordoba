@@ -534,3 +534,36 @@ class MultisiteIsolationTest(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, self.period_b.name)
+
+    def test_htmx_patients_cross_site_returns_empty(self):
+        """htmx_patients_for_protocol retorna lista vacía para protocolo de otro site."""
+        url = reverse('expenses:htmx_patients')
+        resp = self.client.get(url, {'protocol': self.protocol_b.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, self.patient_b.patient_code)
+
+    def test_htmx_visits_cross_site_returns_empty(self):
+        """htmx_visits_for_patient retorna lista vacía para paciente de otro site."""
+        url = reverse('expenses:htmx_visits')
+        resp = self.client.get(url, {'patient': self.patient_b.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, str(self.visit_b.pk))
+
+    def test_expense_create_cross_site_visit_is_forbidden(self):
+        """expense_create POST con visit de otro site retorna 403 sin crear el gasto."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        fake_image = SimpleUploadedFile(
+            'ticket.jpg', b'\xff\xd8\xff\xe0' + b'\x00' * 20, content_type='image/jpeg'
+        )
+        count_before = Expense.objects.filter(visit=self.visit_b).count()
+        url = reverse('expenses:create')
+        resp = self.client.post(url, {
+            'protocol': self.protocol_b.pk,
+            'visit': self.visit_b.pk,
+            'category': 'transport',
+            'expense_date': '2025-03-15',
+            'description': 'Intento cruzado',
+            'ticket_file': fake_image,
+        })
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(Expense.objects.filter(visit=self.visit_b).count(), count_before)
