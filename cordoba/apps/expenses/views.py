@@ -145,16 +145,25 @@ def expense_create(request):
                 VisitType, pk=visit_type_id, protocol=patient.protocol
             )
 
+            # Fecha real de la visita (campo opcional del formulario)
+            visit_actual_date = form.cleaned_data.get('visit_actual_date')
+
             # Buscar o crear la instancia de visita
             visit, created = Visit.objects.get_or_create(
                 patient=patient,
                 visit_type=visit_type,
                 defaults={
                     'scheduled_date': timezone.now().date(),
+                    'actual_date': visit_actual_date,
                     'status': 'scheduled',
                     'created_by': request.user,
                 },
             )
+
+            # Si la visita ya existía y se proporcionó una fecha real, actualizarla
+            if not created and visit_actual_date:
+                visit.actual_date = visit_actual_date
+                visit.save(update_fields=['actual_date'])
 
             # Verificar que la visita no esté bloqueada por un comprobante activo
             if visit.expenses.exclude(status='rejected').exists():

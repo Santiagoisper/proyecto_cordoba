@@ -13,6 +13,11 @@ class ExpenseCreateForm(forms.Form):
         label='Visita',
         widget=forms.Select(attrs={'class': _INPUT, 'id': 'id_visit_type_id'})
     )
+    visit_actual_date = forms.DateField(
+        label='Fecha real de la visita',
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date', 'class': _INPUT, 'id': 'id_visit_actual_date'}),
+    )
     category = forms.ChoiceField(
         label='Categoría',
         choices=Expense.CATEGORY_CHOICES,

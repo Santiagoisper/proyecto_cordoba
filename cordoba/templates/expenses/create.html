@@ -90,6 +90,20 @@
       {% if form.visit_type_id.errors %}
       <p class="text-xs text-red-600 mt-1">{{ form.visit_type_id.errors.0 }}</p>
       {% endif %}
+
+      <!-- Fecha real de la visita (se muestra al elegir tipo de visita) -->
+      <div id="visit-actual-date-container" class="mt-4 {% if not form.visit_actual_date.value %}hidden{% endif %}">
+        <label for="id_visit_actual_date" class="block text-sm font-medium text-slate-700 mb-1.5">
+          Fecha real de la visita
+          <span class="text-slate-400 font-normal text-xs ml-1">(puede diferir del día de carga)</span>
+        </label>
+        <input type="date" name="visit_actual_date" id="id_visit_actual_date"
+               value="{{ form.visit_actual_date.value|default:'' }}"
+               class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        {% if form.visit_actual_date.errors %}
+        <p class="text-xs text-red-600 mt-1">{{ form.visit_actual_date.errors.0 }}</p>
+        {% endif %}
+      </div>
     </div>
 
     <!-- PASO 4: Datos del gasto -->
@@ -257,7 +271,44 @@ document.body.addEventListener('htmx:afterSettle', function() {
   const visitSelect = document.querySelector('#visit-select-container select');
   if (visitSelect) {
     visitSelect.removeAttribute('disabled');
+    visitSelect.addEventListener('change', onVisitTypeChange);
   }
 });
+
+function onVisitTypeChange() {
+  const visitSelect = document.getElementById('id_visit_type_id');
+  const dateContainer = document.getElementById('visit-actual-date-container');
+  const dateInput = document.getElementById('id_visit_actual_date');
+  const expenseDateInput = document.getElementById('id_expense_date');
+
+  if (visitSelect && visitSelect.value) {
+    dateContainer.classList.remove('hidden');
+    // Pre-fill with expense_date if date field is empty
+    if (!dateInput.value && expenseDateInput && expenseDateInput.value) {
+      dateInput.value = expenseDateInput.value;
+    }
+  } else {
+    dateContainer.classList.add('hidden');
+  }
+}
+
+// Keep visit_actual_date in sync with expense_date when user hasn't manually changed it
+(function() {
+  const expenseDateInput = document.getElementById('id_expense_date');
+  const dateInput = document.getElementById('id_visit_actual_date');
+  if (!expenseDateInput || !dateInput) return;
+
+  let userModifiedVisitDate = false;
+  dateInput.addEventListener('change', function() {
+    userModifiedVisitDate = true;
+  });
+
+  expenseDateInput.addEventListener('change', function() {
+    const dateContainer = document.getElementById('visit-actual-date-container');
+    if (!dateContainer.classList.contains('hidden') && !userModifiedVisitDate) {
+      dateInput.value = expenseDateInput.value;
+    }
+  });
+})();
 </script>
 {% endblock %}
