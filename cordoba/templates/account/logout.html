@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cerrar sesión — Proyecto Córdoba</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body class="h-full bg-slate-50">
+
+<div class="min-h-screen flex items-center justify-center py-12 px-4">
+  <div class="max-w-sm w-full text-center">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+      <i data-lucide="log-out" class="h-10 w-10 text-slate-400 mx-auto mb-4"></i>
+      <h2 class="text-lg font-semibold text-slate-800 mb-2">¿Cerrar sesión?</h2>
+      <p class="text-sm text-slate-500 mb-6">Serás redirigido a la pantalla de inicio de sesión.</p>
+      <form method="post" action="{% url 'account_logout' %}">
+        {% csrf_token %}
+        <button type="submit"
+                class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors text-sm">
+          Confirmar salida
+        </button>
+      </form>
+      <a href="{% url 'dashboard:index' %}"
+         class="block mt-3 text-sm text-slate-500 hover:text-slate-700">
+        Cancelar
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>

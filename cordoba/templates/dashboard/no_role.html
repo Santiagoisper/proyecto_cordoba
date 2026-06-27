@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Sin rol asignado{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto mt-10 text-center">
+  <div class="bg-white rounded-xl border border-amber-200 p-8 shadow-sm">
+    <i data-lucide="alert-triangle" class="h-12 w-12 text-amber-400 mx-auto mb-4"></i>
+    <h2 class="text-xl font-bold text-slate-800 mb-2">Sin rol asignado</h2>
+    <p class="text-slate-500 text-sm mb-4">
+      Tu cuenta aún no tiene un rol configurado en el sistema.
+      Contactá al administrador del site para que te asigne el rol correspondiente.
+    </p>
+    <p class="text-xs text-slate-400">
+      Usuario: <strong>{{ user.username }}</strong>
+    </p>
+  </div>
+</div>
+{% endblock %}

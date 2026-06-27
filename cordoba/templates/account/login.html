@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Iniciar sesión — Proyecto Córdoba</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body class="h-full bg-slate-50">
+
+<div class="min-h-screen flex items-center justify-center py-12 px-4">
+  <div class="max-w-sm w-full">
+
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-14 h-14 bg-primary-800 rounded-2xl mb-4 shadow-lg">
+        <i data-lucide="shield-check" class="h-7 w-7 text-white"></i>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900">Proyecto Córdoba</h1>
+      <p class="text-slate-500 text-sm mt-1">Sistema de viáticos clínicos</p>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+      <h2 class="text-lg font-semibold text-slate-800 mb-6">Iniciar sesión</h2>
+
+      <form method="post" action="{% url 'account_login' %}" class="space-y-4">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+          {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div>
+          <label for="{{ form.login.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+            Usuario
+          </label>
+          <input
+            type="text"
+            name="{{ form.login.html_name }}"
+            id="{{ form.login.id_for_label }}"
+            autocomplete="username"
+            required
+            class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            placeholder="Tu nombre de usuario"
+            value="{{ form.login.value|default:'' }}"
+          />
+          {% if form.login.errors %}
+          <p class="text-xs text-red-600 mt-1">{{ form.login.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.password.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+            Contraseña
+          </label>
+          <input
+            type="password"
+            name="{{ form.password.html_name }}"
+            id="{{ form.password.id_for_label }}"
+            autocomplete="current-password"
+            required
+            class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            placeholder="••••••••"
+          />
+          {% if form.password.errors %}
+          <p class="text-xs text-red-600 mt-1">{{ form.password.errors.0 }}</p>
+          {% endif %}
+        </div>
+
+        {% if redirect_field_value %}
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+        {% endif %}
+
+        <button
+          type="submit"
+          class="w-full bg-primary-800 hover:bg-primary-900 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors text-sm shadow-sm mt-2">
+          Entrar al sistema
+        </button>
+      </form>
+    </div>
+
+    <p class="text-center text-xs text-slate-400 mt-6">
+      CINME / Innova Trials &nbsp;·&nbsp; Uso exclusivo del personal autorizado
+    </p>
+  </div>
+</div>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>

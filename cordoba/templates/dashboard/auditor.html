@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Auditor{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-slate-900">Panel de auditoría</h1>
+    <p class="text-slate-500 text-sm mt-1">Acceso de solo lectura</p>
+  </div>
+
+  <!-- KPIs de auditoría -->
+  <div class="grid grid-cols-3 gap-4 mb-8">
+    <div class="bg-white border border-slate-200 rounded-xl p-5 text-center shadow-sm">
+      <i data-lucide="flask-conical" class="h-6 w-6 text-blue-500 mx-auto mb-2"></i>
+      <p class="text-3xl font-bold text-slate-900">{{ protocols.count }}</p>
+      <p class="text-xs text-slate-500 mt-1">Protocolos</p>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-xl p-5 text-center shadow-sm">
+      <i data-lucide="calendar-range" class="h-6 w-6 text-amber-500 mx-auto mb-2"></i>
+      <p class="text-3xl font-bold text-slate-900">{{ open_periods }}</p>
+      <p class="text-xs text-slate-500 mt-1">Períodos abiertos</p>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-xl p-5 text-center shadow-sm">
+      <i data-lucide="receipt" class="h-6 w-6 text-green-500 mx-auto mb-2"></i>
+      <p class="text-3xl font-bold text-slate-900">{{ total_expenses }}</p>
+      <p class="text-xs text-slate-500 mt-1">Gastos totales</p>
+    </div>
+  </div>
+
+  <!-- Protocolos activos -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-slate-100">
+      <h2 class="font-semibold text-slate-800">Protocolos activos</h2>
+    </div>
+    {% if protocols %}
+    <div class="divide-y divide-slate-100">
+      {% for protocol in protocols %}
+      <div class="px-6 py-3 flex items-center justify-between">
+        <div>
+          <span class="text-sm font-semibold text-slate-800">{{ protocol.code }}</span>
+          <span class="text-sm text-slate-500 ml-2">{{ protocol.name }}</span>
+        </div>
+        <span class="text-xs text-slate-400">{{ protocol.sponsor }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-6 py-10 text-center">
+      <p class="text-slate-400 text-sm">No hay protocolos activos</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

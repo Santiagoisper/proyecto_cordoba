@@ -1,0 +1,78 @@
+from django.db import models
+from django.conf import settings
+
+
+class Protocol(models.Model):
+    """
+    Protocolo de ensayo clínico.
+    Un protocol puede tener múltiples pacientes y visitas.
+    """
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=300)
+    sponsor = models.CharField(max_length=200, blank=True)
+    phase = models.CharField(max_length=20, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    currency = models.CharField(max_length=3, default='ARS', help_text="ISO 4217")
+    max_daily_meals = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Tope diario para comidas en la moneda del protocolo"
+    )
+    max_daily_transport = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Tope diario para transporte"
+    )
+    max_daily_accommodation = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Tope diario para alojamiento"
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='protocols_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    external_protocol_id = models.CharField(max_length=100, blank=True, null=True,
+        help_text="ID en Alpha CR para futura integración")
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Protocolo'
+        verbose_name_plural = 'Protocolos'
+
+    def __str__(self):
+        return f"{self.code} — {self.name}"
+
+
+class VisitType(models.Model):
+    """
+    Tipos de visita para un protocolo específico.
+    Ej: Screening, V1, V2, End of Study, Unscheduled.
+    """
+    protocol = models.ForeignKey(
+        Protocol, on_delete=models.CASCADE, related_name='visit_types'
+    )
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=20)
+    order = models.PositiveIntegerField(default=0)
+    window_before_days = models.PositiveIntegerField(
+        default=3,
+        help_text="Días antes de la visita en que se aceptan tickets"
+    )
+    window_after_days = models.PositiveIntegerField(
+        default=3,
+        help_text="Días después de la visita en que se aceptan tickets"
+    )
+
+    class Meta:
+        ordering = ['order']
+        unique_together = ['protocol', 'code']
+        verbose_name = 'Tipo de visita'
+        verbose_name_plural = 'Tipos de visita'
+
+    def __str__(self):
+        return f"{self.protocol.code} — {self.name}"

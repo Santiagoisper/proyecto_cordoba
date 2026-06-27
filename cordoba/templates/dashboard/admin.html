@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Admin{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+
+  <!-- Encabezado -->
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-slate-900">Panel de administración</h1>
+    <p class="text-slate-500 text-sm mt-1">Resumen general del sistema</p>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="p-2 bg-blue-100 rounded-lg">
+          <i data-lucide="flask-conical" class="h-5 w-5 text-blue-600"></i>
+        </div>
+        <span class="text-sm text-slate-500 font-medium">Protocolos activos</span>
+      </div>
+      <p class="text-3xl font-bold text-slate-900">{{ total_protocols }}</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="p-2 bg-violet-100 rounded-lg">
+          <i data-lucide="users" class="h-5 w-5 text-violet-600"></i>
+        </div>
+        <span class="text-sm text-slate-500 font-medium">Pacientes activos</span>
+      </div>
+      <p class="text-3xl font-bold text-slate-900">{{ total_patients }}</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="p-2 bg-amber-100 rounded-lg">
+          <i data-lucide="clock" class="h-5 w-5 text-amber-600"></i>
+        </div>
+        <span class="text-sm text-slate-500 font-medium">Gastos pendientes</span>
+      </div>
+      <p class="text-3xl font-bold text-amber-600">{{ pending_expenses }}</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="p-2 bg-green-100 rounded-lg">
+          <i data-lucide="receipt" class="h-5 w-5 text-green-600"></i>
+        </div>
+        <span class="text-sm text-slate-500 font-medium">Gastos totales</span>
+      </div>
+      <p class="text-3xl font-bold text-slate-900">{{ total_expenses }}</p>
+    </div>
+
+  </div>
+
+  <!-- Últimos gastos -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-slate-100">
+      <h2 class="font-semibold text-slate-800">Actividad reciente</h2>
+    </div>
+    {% if recent_expenses %}
+    <div class="divide-y divide-slate-100">
+      {% for expense in recent_expenses %}
+      <div class="px-6 py-4 flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-slate-800 truncate">
+            {{ expense.visit.patient }}
+          </p>
+          <p class="text-xs text-slate-500 truncate">
+            {{ expense.get_category_display }} — {{ expense.expense_date }}
+          </p>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <span class="text-sm font-semibold text-slate-800">
+            ${{ expense.amount|floatformat:2 }} {{ expense.currency }}
+          </span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+            {% if expense.status == 'approved' %}bg-green-100 text-green-700
+            {% elif expense.status == 'rejected' %}bg-red-100 text-red-700
+            {% elif expense.status == 'observed' %}bg-amber-100 text-amber-700
+            {% else %}bg-slate-100 text-slate-600{% endif %}">
+            {{ expense.get_status_display }}
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-6 py-12 text-center">
+      <i data-lucide="inbox" class="h-10 w-10 text-slate-300 mx-auto mb-3"></i>
+      <p class="text-slate-500 text-sm">No hay gastos cargados aún</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

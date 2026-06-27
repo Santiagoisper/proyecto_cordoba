@@ -1,0 +1,3 @@
+- [Django project location](django-project-location.md) — Django app lives at `cordoba/` in the workspace root, NOT inside `artifacts/`
+- [Django startup and PORT](django-startup.md) — workflow command uses `${PORT:-8000}` fallback; PORT must be set in env or runserver gets empty string
+- [Login/logout templates](django-auth-templates.md) — login.html and logout.html are standalone HTML (no extends base.html) to avoid duplicate block error
