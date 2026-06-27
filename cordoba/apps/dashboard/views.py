@@ -3,6 +3,9 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 
 
+PENDING_STATUSES = ['ocr_pending', 'pending_review']
+
+
 @login_required
 def dashboard(request):
     user = request.user
@@ -37,7 +40,7 @@ def _admin_context(user):
     return {
         'total_protocols': Protocol.objects.filter(is_active=True).count(),
         'total_patients': Patient.objects.filter(is_active=True).count(),
-        'pending_expenses': Expense.objects.filter(status='pending').count(),
+        'pending_expenses': Expense.objects.filter(status__in=PENDING_STATUSES).count(),
         'total_expenses': Expense.objects.count(),
         'recent_expenses': Expense.objects.select_related(
             'visit__patient__protocol', 'submitted_by'
@@ -48,7 +51,7 @@ def _admin_context(user):
 def _coordinator_context(user):
     from apps.expenses.models import Expense
 
-    pending = Expense.objects.filter(status='pending').select_related(
+    pending = Expense.objects.filter(status='pending_review').select_related(
         'visit__patient__protocol',
         'visit__visit_type',
         'submitted_by'
@@ -75,7 +78,7 @@ def _assistant_context(user):
 
     return {
         'my_expenses': my_expenses[:10],
-        'pending_count': my_expenses.filter(status='pending').count(),
+        'pending_count': my_expenses.filter(status__in=PENDING_STATUSES).count(),
         'approved_count': my_expenses.filter(status='approved').count(),
         'rejected_count': my_expenses.filter(status='rejected').count(),
     }

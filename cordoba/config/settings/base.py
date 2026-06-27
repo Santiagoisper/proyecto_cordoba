@@ -31,6 +31,7 @@ THIRD_PARTY_APPS = [
     'allauth',
     'allauth.account',
     'rest_framework',
+    'storages',
 ]
 
 LOCAL_APPS = [

@@ -1,7 +1,7 @@
 """
 Servicio OCR para Proyecto Córdoba.
 Adaptador Veryfi con modo mock para desarrollo sin API key.
-Veryfi se llama directamente por HTTP (sin SDK).
+Trabaja con bytes del archivo (compatible con almacenamiento local y S3).
 """
 import re
 import json
@@ -45,6 +45,7 @@ class OCRService:
     """
     Servicio OCR. Usa Veryfi si las credenciales están configuradas,
     de lo contrario retorna un resultado mock para desarrollo.
+    Acepta bytes del archivo para ser compatible con almacenamiento local y S3.
     """
 
     VERYFI_BASE_URL = 'https://api.veryfi.com/api/v8'
@@ -58,9 +59,10 @@ class OCRService:
     def has_credentials(self) -> bool:
         return all([self.client_id, self.client_secret, self.username, self.api_key])
 
-    def process_file(self, file_path: str) -> OCRResult:
+    def process_bytes(self, file_bytes: bytes, filename: str = 'ticket') -> OCRResult:
         """
-        Procesa un archivo de ticket y retorna los datos extraídos.
+        Procesa bytes de un archivo de ticket y retorna los datos extraídos.
+        Acepta bytes directamente para ser compatible con almacenamiento local y S3.
         En modo mock (sin credenciales), retorna datos vacíos con baja confianza.
         Errores de API/red se propagan como excepciones para que Celery los reintente.
         """
@@ -69,16 +71,11 @@ class OCRService:
             return self._mock_result()
 
         # Las excepciones de Veryfi API se propagan para que Celery haga retry
-        return self._veryfi_process(file_path)
+        return self._veryfi_process(file_bytes, filename)
 
-    def _veryfi_process(self, file_path: str) -> OCRResult:
+    def _veryfi_process(self, file_bytes: bytes, filename: str) -> OCRResult:
         """Llama a la API de Veryfi y parsea la respuesta."""
-        with open(file_path, 'rb') as f:
-            file_data = f.read()
-
-        file_b64 = base64.b64encode(file_data).decode('utf-8')
-        import os
-        filename = os.path.basename(file_path)
+        file_b64 = base64.b64encode(file_bytes).decode('utf-8')
 
         payload = {
             'file_name': filename,

@@ -1,6 +1,7 @@
 """
 Celery tasks para procesamiento OCR asíncrono.
 En desarrollo (CELERY_TASK_ALWAYS_EAGER=True) las tareas se ejecutan de forma síncrona.
+Lee el archivo via Django FieldFile.open() para ser compatible con local y S3.
 """
 import logging
 from celery import shared_task
@@ -17,10 +18,11 @@ logger = logging.getLogger(__name__)
 def process_ocr_for_ticket(self, ticket_file_id: int):
     """
     Procesa el OCR de un TicketFile.
-    1. Llama al OCRService (propaga excepciones → Celery hace retry)
-    2. Guarda campos extraídos en Expense
-    3. Actualiza estado a 'pending_review'
-    4. Registra AuditLog con 'ocr_completed' o 'ocr_failed'
+    1. Lee el archivo via FieldFile.open() (compatible con local y S3)
+    2. Llama al OCRService (excepciones propagan para retry automático)
+    3. Guarda campos extraídos en Expense
+    4. Actualiza estado a 'pending_review'
+    5. Registra AuditLog con 'ocr_completed' o 'ocr_failed'
     """
     from django.utils import timezone
     from .models import TicketFile, AuditLog
@@ -39,9 +41,13 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
     expense = ticket.expense
 
     try:
+        # Leer archivo como bytes (compatible con local y S3)
+        with ticket.file.open('rb') as f:
+            file_bytes = f.read()
+
         service = OCRService()
-        # process_file() propaga excepciones de API/red → Celery retry automático
-        result = service.process_file(ticket.file.path)
+        # process_bytes() propaga excepciones de API/red → Celery retry automático
+        result = service.process_bytes(file_bytes, filename=ticket.original_filename or 'ticket')
 
         # Guardar metadatos OCR en ocr_raw_data
         ocr_meta = {
