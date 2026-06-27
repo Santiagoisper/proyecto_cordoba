@@ -206,16 +206,25 @@
             <span class="text-slate-500 ml-1">
               por {{ log.user.get_full_name|default:log.user.username }}
             </span>
+            {% if log.details.prev_status and log.details.new_status %}
+            <span class="ml-1 text-xs text-slate-400">
+              ({{ log.details.prev_status }} → {{ log.details.new_status }})
+            </span>
+            {% elif log.details.prev_status %}
+            <span class="ml-1 text-xs text-slate-400">(desde {{ log.details.prev_status }})</span>
+            {% endif %}
             <time class="block text-xs text-slate-400 mt-0.5">
               {{ log.timestamp|date:"d/m/Y H:i:s" }}
               {% if log.ip_address %}· IP: {{ log.ip_address }}{% endif %}
             </time>
-            {% if log.details %}
-              {% with notes=log.details.notes %}
-                {% if notes %}
-                <p class="mt-1 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">{{ notes }}</p>
-                {% endif %}
-              {% endwith %}
+            {% if log.details.notes %}
+            <p class="mt-1 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">{{ log.details.notes }}</p>
+            {% endif %}
+            {% if log.details.period_name %}
+            <p class="mt-1 text-xs text-teal-700 bg-teal-50 rounded px-2 py-1">
+              <i data-lucide="lock" class="h-3 w-3 inline"></i>
+              Período cerrado: {{ log.details.period_name }}
+            </p>
             {% endif %}
           </div>
         </li>

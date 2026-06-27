@@ -30,6 +30,25 @@ def _can_coordinate(user):
     return user.is_superuser or user.is_site_admin or user.is_coordinator
 
 
+def _period_locked_response(expense):
+    """
+    Retorna un HttpResponse(422) si el gasto pertenece a un período cerrado o exportado.
+    Retorna None si la mutación está permitida.
+    Llamar DESPUÉS de haber hecho select_related('period') en el queryset.
+    """
+    if expense.period_id is not None and expense.period.status != 'open':
+        msg = (
+            f'Este gasto pertenece al período «{expense.period.name}» '
+            f'({expense.period.get_status_display().lower()}). '
+            f'Los períodos cerrados son inmutables.'
+        )
+        return HttpResponse(
+            f'<p class="text-red-600 text-sm px-4 py-2">{msg}</p>',
+            status=422,
+        )
+    return None
+
+
 # ─── Expense list ─────────────────────────────────────────────────────────────
 
 @login_required
@@ -125,7 +144,7 @@ def expense_create(request):
 def expense_review(request, pk):
     """Revisión OCR: muestra campos extraídos con badges de confianza."""
     expense = get_object_or_404(
-        Expense.objects.select_related('visit__patient__protocol', 'visit__visit_type'),
+        Expense.objects.select_related('visit__patient__protocol', 'visit__visit_type', 'period'),
         pk=pk,
     )
 
@@ -137,6 +156,11 @@ def expense_review(request, pk):
     ocr_confidence = expense.ocr_confidence_per_field
 
     if request.method == 'POST':
+        lock_response = _period_locked_response(expense)
+        if lock_response:
+            messages.error(request, 'El período de este gasto está cerrado. No se permiten modificaciones.')
+            return redirect('expenses:detail', pk=expense.pk)
+
         form = ExpenseReviewForm(request.POST, instance=expense)
         if form.is_valid():
             updated = form.save(commit=False)
@@ -195,7 +219,7 @@ def expense_detail(request, pk):
     expense = get_object_or_404(
         Expense.objects.select_related(
             'visit__patient__protocol', 'visit__visit_type',
-            'submitted_by', 'reviewed_by'
+            'submitted_by', 'reviewed_by', 'period'
         ).prefetch_related('ticket_files'),
         pk=pk,
     )
@@ -227,10 +251,17 @@ def expense_correct(request, pk):
     """
     Permite al asistente corregir un gasto 'observed' y reenviarlo a revisión.
     """
-    expense = get_object_or_404(Expense, pk=pk, status='observed')
+    expense = get_object_or_404(
+        Expense.objects.select_related('period'), pk=pk, status='observed'
+    )
 
     if not (request.user == expense.submitted_by or _can_coordinate(request.user)):
         return HttpResponseForbidden("No tenés permiso para corregir este gasto.")
+
+    lock_response = _period_locked_response(expense)
+    if lock_response and request.method == 'POST':
+        messages.error(request, 'El período de este gasto está cerrado. No se permiten correcciones.')
+        return redirect('expenses:detail', pk=expense.pk)
 
     if request.method == 'POST':
         form = ObservedCorrectionForm(request.POST, instance=expense)
@@ -273,7 +304,12 @@ def approve_expense(request, pk):
     if not _can_coordinate(request.user):
         return HttpResponseForbidden("No tenés permiso para aprobar gastos.")
 
-    expense = get_object_or_404(Expense, pk=pk, status='pending_review')
+    expense = get_object_or_404(
+        Expense.objects.select_related('period'), pk=pk, status='pending_review'
+    )
+    lock_response = _period_locked_response(expense)
+    if lock_response:
+        return lock_response
     prev_status = expense.status
 
     expense.status = 'approved'
@@ -306,7 +342,12 @@ def reject_expense(request, pk):
     if not _can_coordinate(request.user):
         return HttpResponseForbidden("No tenés permiso para rechazar gastos.")
 
-    expense = get_object_or_404(Expense, pk=pk, status='pending_review')
+    expense = get_object_or_404(
+        Expense.objects.select_related('period'), pk=pk, status='pending_review'
+    )
+    lock_response = _period_locked_response(expense)
+    if lock_response:
+        return lock_response
     notes = request.POST.get('notes', '').strip()
     if not notes:
         return HttpResponse(
@@ -345,7 +386,12 @@ def observe_expense(request, pk):
     if not _can_coordinate(request.user):
         return HttpResponseForbidden("No tenés permiso para observar gastos.")
 
-    expense = get_object_or_404(Expense, pk=pk, status='pending_review')
+    expense = get_object_or_404(
+        Expense.objects.select_related('period'), pk=pk, status='pending_review'
+    )
+    lock_response = _period_locked_response(expense)
+    if lock_response:
+        return lock_response
     notes = request.POST.get('notes', '').strip()
     if not notes:
         return HttpResponse(

@@ -41,6 +41,18 @@
           <i data-lucide="check-circle" class="h-3 w-3"></i> {{ period.count_approved }}
         </span>
         {% endif %}
+        {% if period.count_rejected > 0 %}
+        <span title="Rechazados"
+              class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+          <i data-lucide="x-circle" class="h-3 w-3"></i> {{ period.count_rejected }}
+        </span>
+        {% endif %}
+        {% if period.count_observed > 0 %}
+        <span title="Observados"
+              class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+          <i data-lucide="message-square" class="h-3 w-3"></i> {{ period.count_observed }}
+        </span>
+        {% endif %}
         {% if period.count_settled > 0 %}
         <span title="Liquidados"
               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">
@@ -75,20 +87,22 @@
       {% if period.count_pending > 0 %}
         <span class="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg cursor-not-allowed"
               title="Hay gastos pendientes de revisión. Aprobá o rechazá todos antes de cerrar.">
-          <i data-lucide="alert-triangle" class="h-3.5 w-3.5"></i> Hay pendientes
+          <i data-lucide="alert-triangle" class="h-3.5 w-3.5"></i> {{ period.count_pending }} pendiente{{ period.count_pending|pluralize:"s" }}
         </span>
       {% else %}
-        <button
-          hx-post="{% url 'periods:close' period.pk %}"
-          hx-target="#period-row-{{ period.pk }}"
-          hx-swap="outerHTML"
-          hx-confirm="¿Cerrar el período «{{ period.name }}»? Esta acción liquidará todos los gastos aprobados y no podrá deshacerse."
-          hx-include="[name='csrfmiddlewaretoken']"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                 bg-slate-800 hover:bg-slate-900 text-white transition-colors">
-          <i data-lucide="lock" class="h-3.5 w-3.5"></i> Cerrar período
-        </button>
-        {% csrf_token %}
+        <form method="post" action="{% url 'periods:close' period.pk %}" class="inline"
+              onsubmit="return confirm('¿Cerrar el período «{{ period.name }}»? Esta acción liquidará todos los gastos aprobados y no podrá deshacerse.')">
+          {% csrf_token %}
+          <button type="submit"
+                  hx-post="{% url 'periods:close' period.pk %}"
+                  hx-target="#period-row-{{ period.pk }}"
+                  hx-swap="outerHTML"
+                  hx-confirm="¿Cerrar el período «{{ period.name }}»? Esta acción liquidará todos los gastos aprobados y no podrá deshacerse."
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                         bg-slate-800 hover:bg-slate-900 text-white transition-colors">
+            <i data-lucide="lock" class="h-3.5 w-3.5"></i> Cerrar período
+          </button>
+        </form>
       {% endif %}
     {% else %}
       <span class="text-xs text-slate-400">—</span>
@@ -96,6 +110,3 @@
   </td>
 
 </tr>
-{% if period.status == 'open' and period.count_pending == 0 %}
-<tr id="period-error-{{ period.pk }}-row" class="hidden"></tr>
-{% endif %}

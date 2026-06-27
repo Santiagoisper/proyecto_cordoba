@@ -345,3 +345,81 @@ class AuditLogImmutabilityTest(BaseExpenseTestCase):
             object_id=expense.pk,
         )
         self.assertTrue(log.exists())
+
+
+# ─── Tests de inmutabilidad de período cerrado ────────────────────────────────
+
+class ClosedPeriodImmutabilityTest(BaseExpenseTestCase):
+    """Verifica que no se puedan mutar gastos pertenecientes a un período cerrado."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.closed_period = ExpensePeriod.objects.create(
+            protocol=cls.protocol,
+            name='Período Cerrado Test',
+            date_from=date(2024, 10, 1),
+            date_to=date(2024, 12, 31),
+            status='closed',
+            closed_by=cls.coordinator,
+            closed_at=timezone.now(),
+            created_by=cls.coordinator,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.coordinator)
+
+    def _make_closed_expense(self, status='pending_review'):
+        return Expense.objects.create(
+            visit=self.visit,
+            period=self.closed_period,
+            category='transport',
+            amount=Decimal('400.00'),
+            expense_date=date(2024, 11, 10),
+            status=status,
+            submitted_by=self.assistant,
+        )
+
+    def test_approve_blocked_for_closed_period(self):
+        """approve_expense retorna 422 si el período está cerrado."""
+        expense = self._make_closed_expense(status='pending_review')
+        url = reverse('expenses:approve', kwargs={'pk': expense.pk})
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 422)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'pending_review')
+
+    def test_reject_blocked_for_closed_period(self):
+        """reject_expense retorna 422 si el período está cerrado."""
+        expense = self._make_closed_expense(status='pending_review')
+        url = reverse('expenses:reject', kwargs={'pk': expense.pk})
+        resp = self.client.post(url, {'notes': 'test'})
+        self.assertEqual(resp.status_code, 422)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'pending_review')
+
+    def test_observe_blocked_for_closed_period(self):
+        """observe_expense retorna 422 si el período está cerrado."""
+        expense = self._make_closed_expense(status='pending_review')
+        url = reverse('expenses:observe', kwargs={'pk': expense.pk})
+        resp = self.client.post(url, {'notes': 'test'})
+        self.assertEqual(resp.status_code, 422)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'pending_review')
+
+    def test_correct_blocked_for_closed_period(self):
+        """expense_correct redirige con error si el período está cerrado."""
+        expense = self._make_closed_expense(status='observed')
+        self.client.force_login(self.assistant)
+        url = reverse('expenses:correct', kwargs={'pk': expense.pk})
+        resp = self.client.post(url, {'description': 'nueva desc'})
+        self.assertIn(resp.status_code, [302, 200])
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'observed')
+
+    def test_second_close_on_same_period_blocked(self):
+        """close_period falla si se intenta cerrar un período ya cerrado."""
+        with self.assertRaises(ValueError) as ctx:
+            close_period(self.closed_period.pk, self.coordinator)
+        self.assertIn('cerrado', str(ctx.exception).lower())
