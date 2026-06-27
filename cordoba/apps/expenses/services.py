@@ -62,20 +62,14 @@ class OCRService:
         """
         Procesa un archivo de ticket y retorna los datos extraídos.
         En modo mock (sin credenciales), retorna datos vacíos con baja confianza.
+        Errores de API/red se propagan como excepciones para que Celery los reintente.
         """
         if not self.has_credentials():
             logger.info("OCR: sin credenciales Veryfi — modo mock activado")
             return self._mock_result()
 
-        try:
-            return self._veryfi_process(file_path)
-        except Exception as exc:
-            logger.error("OCR: error en Veryfi API: %s", exc, exc_info=True)
-            return OCRResult(
-                success=False,
-                error_message=str(exc),
-                raw_response={'error': str(exc)},
-            )
+        # Las excepciones de Veryfi API se propagan para que Celery haga retry
+        return self._veryfi_process(file_path)
 
     def _veryfi_process(self, file_path: str) -> OCRResult:
         """Llama a la API de Veryfi y parsea la respuesta."""

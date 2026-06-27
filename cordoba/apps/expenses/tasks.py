@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 def process_ocr_for_ticket(self, ticket_file_id: int):
     """
     Procesa el OCR de un TicketFile.
-    1. Llama al OCRService
+    1. Llama al OCRService (propaga excepciones → Celery hace retry)
     2. Guarda campos extraídos en Expense
     3. Actualiza estado a 'pending_review'
-    4. Registra AuditLog
+    4. Registra AuditLog con 'ocr_completed' o 'ocr_failed'
     """
     from django.utils import timezone
     from .models import TicketFile, AuditLog
@@ -40,26 +40,10 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
 
     try:
         service = OCRService()
+        # process_file() propaga excepciones de API/red → Celery retry automático
         result = service.process_file(ticket.file.path)
 
-        # Guardar resultados en el modelo Expense
-        expense.ocr_raw_data = result.raw_response
-        expense.ocr_processed_at = timezone.now()
-
-        # Campos extraídos por OCR (guardados en el modelo extendido via ocr_raw_data)
-        # También pre-completar el gasto si la confianza es alta (>= 0.7)
-        if result.amount is not None and result.confidence_amount >= 0.7:
-            if expense.amount == 0 or expense.amount is None:
-                expense.amount = result.amount
-
-        if result.expense_date is not None and result.confidence_date >= 0.7:
-            expense.expense_date = result.expense_date
-
-        if result.vendor and result.confidence_vendor >= 0.7:
-            if not expense.vendor:
-                expense.vendor = result.vendor
-
-        # Guardar metadatos OCR extendidos
+        # Guardar metadatos OCR en ocr_raw_data
         ocr_meta = {
             'extracted': {
                 'amount': str(result.amount) if result.amount else None,
@@ -76,9 +60,21 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
                 'receipt': result.confidence_receipt,
             },
             'mock': result.raw_response.get('mock', False),
-            'success': result.success,
+            'success': True,
         }
         expense.ocr_raw_data = ocr_meta
+        expense.ocr_processed_at = timezone.now()
+
+        # Pre-completar campos de alta confianza (>= 0.7)
+        if result.amount is not None and result.confidence_amount >= 0.7:
+            if not expense.amount or expense.amount == 0:
+                expense.amount = result.amount
+        if result.expense_date is not None and result.confidence_date >= 0.7:
+            expense.expense_date = result.expense_date
+        if result.vendor and result.confidence_vendor >= 0.7:
+            if not expense.vendor:
+                expense.vendor = result.vendor
+
         expense.status = 'pending_review'
         expense.save(update_fields=[
             'ocr_raw_data', 'ocr_processed_at', 'status',
@@ -96,33 +92,47 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
             object_repr=str(expense),
             details={
                 'ticket_file_id': ticket_file_id,
-                'ocr_success': result.success,
                 'mock_mode': result.raw_response.get('mock', False),
+                'fields_pre_filled': {
+                    'amount': result.confidence_amount >= 0.7,
+                    'date': result.confidence_date >= 0.7,
+                    'vendor': result.confidence_vendor >= 0.7,
+                },
             },
         )
         logger.info("OCR completado para TicketFile %s (Expense %s)", ticket_file_id, expense.pk)
 
     except Exception as exc:
         logger.error(
-            "OCR falló para TicketFile %s: %s",
-            ticket_file_id, exc, exc_info=True
-        )
-        ticket.ocr_status = 'failed'
-        ticket.save(update_fields=['ocr_status'])
-
-        expense.status = 'pending_review'
-        expense.save(update_fields=['status'])
-
-        AuditLog.objects.create(
-            user=ticket.uploaded_by,
-            action='ocr_failed',
-            content_type='Expense',
-            object_id=expense.pk,
-            object_repr=str(expense),
-            details={'ticket_file_id': ticket_file_id, 'error': str(exc)},
+            "OCR falló para TicketFile %s (intento %s/%s): %s",
+            ticket_file_id, self.request.retries + 1, self.max_retries + 1, exc,
+            exc_info=True,
         )
 
-        try:
-            raise self.retry(exc=exc)
-        except self.MaxRetriesExceededError:
+        is_final_attempt = self.request.retries >= self.max_retries
+
+        if is_final_attempt:
+            # Máximo de reintentos alcanzado → marcar como fallido definitivamente
+            ticket.ocr_status = 'failed'
+            ticket.save(update_fields=['ocr_status'])
+
+            expense.ocr_raw_data = {'success': False, 'error': str(exc), 'mock': False}
+            expense.status = 'pending_review'
+            expense.save(update_fields=['ocr_raw_data', 'status'])
+
+            AuditLog.objects.create(
+                user=ticket.uploaded_by,
+                action='ocr_failed',
+                content_type='Expense',
+                object_id=expense.pk,
+                object_repr=str(expense),
+                details={
+                    'ticket_file_id': ticket_file_id,
+                    'error': str(exc),
+                    'retries_exhausted': True,
+                },
+            )
             logger.error("OCR: máximo de reintentos alcanzado para TicketFile %s", ticket_file_id)
+        else:
+            # Reintento disponible → propagar para que Celery espere y reintente
+            raise self.retry(exc=exc)
