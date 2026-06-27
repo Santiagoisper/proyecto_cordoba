@@ -1,6 +1,7 @@
 import logging
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db.models import Count, Q
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -9,10 +10,10 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.protocols.models import Protocol
 from apps.patients.models import Patient, Visit
 
-from .models import Expense, TicketFile, AuditLog
+from .models import Expense, ExpensePeriod, TicketFile, AuditLog
 from .forms import ExpenseCreateForm, ExpenseReviewForm, ObservedCorrectionForm
 from .tasks import process_ocr_for_ticket
-from .services import ExpenseValidationService
+from .services import ExpenseValidationService, close_period as close_period_service
 
 logger = logging.getLogger(__name__)
 
@@ -394,6 +395,100 @@ def action_modal(request, pk, action):
             else 'Ej: por favor adjuntar el comprobante original...'
         ),
     })
+
+
+# ─── Period management ───────────────────────────────────────────────────────
+
+@login_required
+def period_list(request):
+    """Lista de períodos de rendición. Solo coordinadores y admins."""
+    if not _can_coordinate(request.user):
+        return HttpResponseForbidden("No tenés permiso para ver períodos.")
+
+    periods = (
+        ExpensePeriod.objects
+        .select_related('protocol', 'closed_by', 'created_by')
+        .annotate(
+            count_pending=Count('expenses', filter=Q(expenses__status='pending_review')),
+            count_approved=Count('expenses', filter=Q(expenses__status='approved')),
+            count_rejected=Count('expenses', filter=Q(expenses__status='rejected')),
+            count_observed=Count('expenses', filter=Q(expenses__status='observed')),
+            count_settled=Count('expenses', filter=Q(expenses__status='settled')),
+            count_total=Count('expenses'),
+        )
+        .order_by('-date_from')
+    )
+
+    protocol_id = request.GET.get('protocol')
+    if protocol_id:
+        periods = periods.filter(protocol_id=protocol_id)
+
+    protocols = Protocol.objects.filter(is_active=True).order_by('code')
+
+    return render(request, 'expenses/periods.html', {
+        'periods': periods,
+        'protocols': protocols,
+        'selected_protocol': protocol_id,
+    })
+
+
+@login_required
+@require_POST
+def close_period_view(request, pk):
+    """
+    Cierra un período de rendición. Solo coordinadores/admins.
+    POST-only. Si la petición es HTMX retorna un partial con la fila actualizada;
+    de lo contrario redirige a la lista de períodos.
+    """
+    if not _can_coordinate(request.user):
+        return HttpResponseForbidden("No tenés permiso para cerrar períodos.")
+
+    try:
+        period = close_period_service(pk, request.user)
+    except ExpensePeriod.DoesNotExist:
+        return HttpResponse(
+            '<div class="text-red-600 text-sm px-4 py-2">Período no encontrado.</div>',
+            status=404,
+        )
+    except ValueError as exc:
+        error_html = (
+            f'<div id="period-error-{pk}" '
+            f'class="text-red-700 text-sm px-4 py-3 bg-red-50 rounded-lg border border-red-200 mt-2">'
+            f'<strong>No se pudo cerrar:</strong> {exc}</div>'
+        )
+        if request.headers.get('HX-Request'):
+            return HttpResponse(error_html, status=422)
+        messages.error(request, str(exc))
+        return redirect('periods:list')
+    except Exception as exc:
+        logger.exception("Error inesperado cerrando período %s: %s", pk, exc)
+        if request.headers.get('HX-Request'):
+            return HttpResponse(
+                '<div class="text-red-600 text-sm px-4 py-2">Error interno. Contactá al administrador.</div>',
+                status=500,
+            )
+        messages.error(request, "Error inesperado al cerrar el período.")
+        return redirect('periods:list')
+
+    if request.headers.get('HX-Request'):
+        period_annotated = (
+            ExpensePeriod.objects
+            .filter(pk=period.pk)
+            .select_related('protocol', 'closed_by')
+            .annotate(
+                count_pending=Count('expenses', filter=Q(expenses__status='pending_review')),
+                count_approved=Count('expenses', filter=Q(expenses__status='approved')),
+                count_settled=Count('expenses', filter=Q(expenses__status='settled')),
+                count_total=Count('expenses'),
+            )
+            .first()
+        )
+        return render(request, 'expenses/partials/period_row.html', {
+            'period': period_annotated,
+        })
+
+    messages.success(request, f"Período «{period.name}» cerrado correctamente.")
+    return redirect('periods:list')
 
 
 # ─── HTMX chained selects ────────────────────────────────────────────────────

@@ -2,11 +2,45 @@ from django.db import models
 from django.conf import settings
 
 
+class Site(models.Model):
+    """
+    Site de investigación (centro clínico).
+    Permite la arquitectura multi-site futura.
+    Los protocolos se ejecutan en uno o más sites.
+    """
+    code = models.CharField(max_length=20, unique=True, help_text="Ej: CINME-01")
+    name = models.CharField(max_length=200)
+    address = models.CharField(max_length=400, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    country = models.CharField(max_length=100, default='Argentina')
+    is_active = models.BooleanField(default=True)
+
+    contact_name = models.CharField(max_length=200, blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=50, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['code']
+        verbose_name = 'Site de investigación'
+        verbose_name_plural = 'Sites de investigación'
+
+    def __str__(self):
+        return f"{self.code} — {self.name}"
+
+
 class Protocol(models.Model):
     """
     Protocolo de ensayo clínico.
     Un protocol puede tener múltiples pacientes y visitas.
     """
+    site = models.ForeignKey(
+        Site, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='protocols',
+        help_text="Site de investigación donde se ejecuta este protocolo (multi-site futuro)"
+    )
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=300)
     sponsor = models.CharField(max_length=200, blank=True)

@@ -15,6 +15,7 @@ urlpatterns = [
     path('patients/', include('apps.patients.urls')),
     path('protocols/', include('apps.protocols.urls')),
     path('reports/', include('apps.reports.urls')),
+    path('periods/', include('apps.expenses.period_urls')),
     path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
 ]
 

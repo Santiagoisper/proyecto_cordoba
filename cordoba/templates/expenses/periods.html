@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Períodos de rendición{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+
+  <div class="mb-6 flex items-center justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-xl font-bold text-slate-900">Períodos de rendición</h1>
+      <p class="text-slate-500 text-sm mt-0.5">Gestioná el cierre de períodos y la liquidación de gastos aprobados.</p>
+    </div>
+    <a href="/admin/expenses/expenseperiod/add/"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium transition-colors">
+      <i data-lucide="plus" class="h-4 w-4"></i> Nuevo período
+    </a>
+  </div>
+
+  <!-- Filtro por protocolo -->
+  <form method="get" class="mb-6 flex items-center gap-3 flex-wrap">
+    <label class="text-sm text-slate-600 font-medium">Protocolo:</label>
+    <select name="protocol" onchange="this.form.submit()"
+            class="text-sm border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
+      <option value="">Todos</option>
+      {% for p in protocols %}
+      <option value="{{ p.pk }}" {% if selected_protocol == p.pk|stringformat:"s" %}selected{% endif %}>
+        {{ p.code }} — {{ p.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </form>
+
+  {% if not periods %}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-8 py-16 text-center">
+    <i data-lucide="calendar-off" class="h-12 w-12 text-slate-300 mx-auto mb-3"></i>
+    <p class="text-slate-500 text-sm">No hay períodos creados todavía.</p>
+    <a href="/admin/expenses/expenseperiod/add/"
+       class="mt-4 inline-flex items-center gap-1.5 text-primary-600 hover:text-primary-800 text-sm font-medium">
+      <i data-lucide="plus" class="h-4 w-4"></i> Crear el primer período
+    </a>
+  </div>
+  {% else %}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 border-b border-slate-200">
+        <tr>
+          <th class="text-left px-5 py-3 font-semibold text-slate-600">Período</th>
+          <th class="text-left px-4 py-3 font-semibold text-slate-600">Protocolo</th>
+          <th class="text-left px-4 py-3 font-semibold text-slate-600">Rango</th>
+          <th class="text-center px-4 py-3 font-semibold text-slate-600">Gastos</th>
+          <th class="text-center px-4 py-3 font-semibold text-slate-600">Estado</th>
+          <th class="text-center px-4 py-3 font-semibold text-slate-600">Acción</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for period in periods %}
+        {% include "expenses/partials/period_row.html" with period=period %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -2,6 +2,7 @@
 Servicios para Proyecto Córdoba.
 - OCRService: adaptador Veryfi con modo mock.
 - ExpenseValidationService: validaciones automáticas de gastos.
+- close_period: cierre de período de rendición con trazabilidad completa.
 """
 import re
 import json
@@ -16,6 +17,8 @@ from dataclasses import dataclass, field
 from typing import Optional, List
 
 from django.conf import settings
+from django.db import transaction
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -244,3 +247,87 @@ class ExpenseValidationService:
         except Exception:
             pass
         return []
+
+
+# ─── Cierre de período ────────────────────────────────────────────────────────
+
+def close_period(period_id: int, user) -> 'ExpensePeriod':
+    """
+    Cierra un período de rendición de forma atómica.
+
+    Reglas de negocio:
+    - El período debe estar en estado 'open'.
+    - No puede haber gastos en estado 'pending_review' dentro del período.
+    - Todos los gastos 'approved' del período pasan a 'settled'.
+    - Se crean AuditLog inmutables por cada gasto y para el período en sí.
+    - closed_by / closed_at se registran en el período.
+
+    Levanta ValueError con mensaje legible si no se cumplen las precondiciones.
+    """
+    from .models import ExpensePeriod, Expense, AuditLog
+
+    with transaction.atomic():
+        period = ExpensePeriod.objects.select_for_update().get(pk=period_id)
+
+        if period.status != 'open':
+            raise ValueError(
+                f"El período «{period.name}» ya está {period.get_status_display().lower()} "
+                f"y no puede cerrarse nuevamente."
+            )
+
+        pending_count = period.expenses.filter(status='pending_review').count()
+        if pending_count > 0:
+            raise ValueError(
+                f"No se puede cerrar: hay {pending_count} gasto(s) pendiente(s) de revisión "
+                f"dentro del período. Aprobá o rechazá todos los gastos antes de cerrar."
+            )
+
+        approved_expenses = list(
+            period.expenses.filter(status='approved').select_related('visit__patient')
+        )
+
+        if approved_expenses:
+            AuditLog.objects.bulk_create([
+                AuditLog(
+                    user=user,
+                    action='period_closed',
+                    content_type='Expense',
+                    object_id=exp.pk,
+                    object_repr=str(exp),
+                    details={
+                        'period_id': period.pk,
+                        'period_name': period.name,
+                        'prev_status': 'approved',
+                        'new_status': 'settled',
+                    },
+                )
+                for exp in approved_expenses
+            ])
+
+            expense_ids = [e.pk for e in approved_expenses]
+            Expense.objects.filter(pk__in=expense_ids).update(status='settled')
+
+        period.status = 'closed'
+        period.closed_by = user
+        period.closed_at = timezone.now()
+        period.save(update_fields=['status', 'closed_by', 'closed_at'])
+
+        AuditLog.objects.create(
+            user=user,
+            action='period_closed',
+            content_type='ExpensePeriod',
+            object_id=period.pk,
+            object_repr=str(period),
+            details={
+                'expenses_settled': len(approved_expenses),
+                'protocol': period.protocol.code,
+                'date_from': str(period.date_from),
+                'date_to': str(period.date_to),
+            },
+        )
+
+        logger.info(
+            "Período #%s «%s» cerrado por %s. Gastos liquidados: %d",
+            period.pk, period.name, user, len(approved_expenses),
+        )
+        return period
