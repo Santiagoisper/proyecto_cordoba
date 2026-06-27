@@ -133,6 +133,13 @@
             Cargado
           </button>
         </div>
+
+        <a id="export-visits-btn"
+           href="{% url 'dashboard:export_visits_csv' %}"
+           class="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-colors font-medium">
+          <i data-lucide="download" class="h-3.5 w-3.5"></i>
+          Exportar CSV
+        </a>
       </div>
     </div>
 
@@ -293,9 +300,22 @@
   let activeProtocol = '';
   let activeStatus = '';
 
+  const exportBaseUrl = "{% url 'dashboard:export_visits_csv' %}";
+
+  function updateExportLink() {
+    const btn = document.getElementById('export-visits-btn');
+    if (!btn) return;
+    const params = new URLSearchParams();
+    if (activeProtocol) params.set('protocol', activeProtocol);
+    if (activeStatus) params.set('status', activeStatus);
+    const qs = params.toString();
+    btn.href = exportBaseUrl + (qs ? '?' + qs : '');
+  }
+
   document.getElementById('filter-protocol')?.addEventListener('change', function() {
     activeProtocol = this.value;
     applyVisitFilters();
+    updateExportLink();
   });
 
   function setStatusFilter(btn) {
@@ -307,6 +327,7 @@
     btn.classList.add('active', 'bg-slate-100', 'text-slate-700', 'font-medium');
     btn.classList.remove('bg-white', 'text-slate-600');
     applyVisitFilters();
+    updateExportLink();
   }
 
   function applyVisitFilters() {

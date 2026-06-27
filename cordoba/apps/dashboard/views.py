@@ -1,5 +1,7 @@
+import csv
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse, HttpResponseForbidden
 from django.utils import timezone
 
 
@@ -165,3 +167,98 @@ def _auditor_context(user):
         'open_periods': ExpensePeriod.objects.filter(status='open').select_related('protocol').count(),
         'total_expenses': Expense.objects.count(),
     }
+
+
+@login_required
+def export_visits_csv(request):
+    user = request.user
+    if not (user.is_superuser or user.is_site_admin or user.is_coordinator):
+        return HttpResponseForbidden()
+
+    from apps.patients.models import Visit
+    from django.db.models import Count, Q
+
+    ACTIVE_EXPENSE_STATUSES = [
+        'ocr_pending', 'pending_review', 'approved', 'observed', 'settled', 'exported'
+    ]
+
+    visits_qs = (
+        Visit.objects.filter(
+            status__in=['scheduled', 'completed'],
+            patient__protocol__is_active=True,
+        )
+        .select_related('patient__protocol', 'visit_type')
+        .annotate(
+            total_expenses=Count('expenses'),
+            active_expenses=Count(
+                'expenses',
+                filter=Q(expenses__status__in=ACTIVE_EXPENSE_STATUSES),
+            ),
+        )
+        .order_by('patient__protocol__code', 'patient__patient_code', 'scheduled_date')
+    )
+
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        visits_qs = visits_qs.filter(patient__protocol__site_id=user.site_id)
+
+    protocol_filter = request.GET.get('protocol', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+
+    if protocol_filter:
+        visits_qs = visits_qs.filter(patient__protocol__code=protocol_filter)
+
+    VISIT_STATUS_LABELS = {
+        'scheduled': 'Programada',
+        'completed': 'Realizada',
+    }
+    COMPROBANTE_LABELS = {
+        'sin_comprobante': 'Sin comprobante',
+        'rechazado': 'Rechazado',
+        'cargado': 'Cargado',
+    }
+
+    rows = []
+    for v in visits_qs:
+        if v.total_expenses == 0:
+            comprobante_status = 'sin_comprobante'
+        elif v.active_expenses == 0:
+            comprobante_status = 'rechazado'
+        else:
+            comprobante_status = 'cargado'
+
+        if status_filter and comprobante_status != status_filter:
+            continue
+
+        rows.append({
+            'protocol_code': v.patient.protocol.code,
+            'patient_code': v.patient.patient_code,
+            'visit_type': v.visit_type.name,
+            'scheduled_date': v.scheduled_date.strftime('%d/%m/%Y') if v.scheduled_date else '',
+            'visit_status': VISIT_STATUS_LABELS.get(v.status, v.status),
+            'comprobante_status': COMPROBANTE_LABELS.get(comprobante_status, comprobante_status),
+        })
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="visitas_comprobantes.csv"'
+    response.write('\ufeff')
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'Protocolo',
+        'Código paciente',
+        'Tipo de visita',
+        'Fecha programada',
+        'Estado visita',
+        'Estado comprobante',
+    ])
+    for row in rows:
+        writer.writerow([
+            row['protocol_code'],
+            row['patient_code'],
+            row['visit_type'],
+            row['scheduled_date'],
+            row['visit_status'],
+            row['comprobante_status'],
+        ])
+
+    return response
