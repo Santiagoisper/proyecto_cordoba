@@ -567,3 +567,44 @@ class MultisiteIsolationTest(TestCase):
         })
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(Expense.objects.filter(visit=self.visit_b).count(), count_before)
+
+    def test_report_site_pdf_cross_site_is_blocked(self):
+        """site_pdf retorna 404 para protocolo de otro site."""
+        url = reverse('reports:site_pdf')
+        resp = self.client.post(url, {
+            'protocol_id': self.protocol_b.pk,
+            'period_id': self.period_b.pk,
+        })
+        self.assertEqual(resp.status_code, 404)
+
+    def test_report_patient_pdf_cross_site_is_blocked(self):
+        """patient_pdf retorna 404 para paciente de otro site."""
+        url = reverse('reports:patient_pdf')
+        resp = self.client.post(url, {
+            'patient_id': self.patient_b.pk,
+            'period_id': self.period_b.pk,
+        })
+        self.assertEqual(resp.status_code, 404)
+
+    def test_report_site_excel_cross_site_is_blocked(self):
+        """site_excel retorna 404 para protocolo de otro site."""
+        url = reverse('reports:site_excel')
+        resp = self.client.post(url, {
+            'protocol_id': self.protocol_b.pk,
+            'period_id': self.period_b.pk,
+        })
+        self.assertEqual(resp.status_code, 404)
+
+    def test_report_htmx_patients_cross_site_returns_empty(self):
+        """htmx_patients (reports) retorna lista vacía para protocolo de otro site."""
+        url = reverse('reports:htmx_patients')
+        resp = self.client.get(url, {'protocol': self.protocol_b.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, self.patient_b.patient_code)
+
+    def test_report_htmx_periods_cross_site_returns_empty(self):
+        """htmx_periods (reports) retorna lista vacía para protocolo de otro site."""
+        url = reverse('reports:htmx_periods')
+        resp = self.client.get(url, {'protocol': self.protocol_b.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, self.period_b.name)

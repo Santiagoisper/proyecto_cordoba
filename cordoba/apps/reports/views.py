@@ -19,8 +19,34 @@ def _can_report(user):
     )
 
 
-def _protocols_ctx():
-    return Protocol.objects.filter(is_active=True).order_by('code')
+def _is_global(user):
+    """True si el usuario no está restringido a un site concreto."""
+    return user.is_superuser or user.is_site_admin or not user.site_id
+
+
+def _scope_protocol(user, qs):
+    """Restringe el QS de Protocol al site del usuario (para no-globales)."""
+    if not _is_global(user):
+        qs = qs.filter(site_id=user.site_id)
+    return qs
+
+
+def _scope_patient(user, qs):
+    """Restringe el QS de Patient al site del usuario (para no-globales)."""
+    if not _is_global(user):
+        qs = qs.filter(protocol__site_id=user.site_id)
+    return qs
+
+
+def _scope_period(user, qs):
+    """Restringe el QS de ExpensePeriod al site del usuario (para no-globales)."""
+    if not _is_global(user):
+        qs = qs.filter(protocol__site_id=user.site_id)
+    return qs
+
+
+def _protocols_ctx(user):
+    return _scope_protocol(user, Protocol.objects.filter(is_active=True).order_by('code'))
 
 
 @login_required
@@ -29,7 +55,7 @@ def reports_index(request):
     if not _can_report(request.user):
         return HttpResponseForbidden("No tenés permiso para generar reportes.")
 
-    return render(request, 'reports/index.html', {'protocols': _protocols_ctx()})
+    return render(request, 'reports/index.html', {'protocols': _protocols_ctx(request.user)})
 
 
 @login_required
@@ -48,25 +74,31 @@ def patient_pdf(request):
 
     if not patient_id or not period_id:
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': 'Seleccioná un paciente y un período antes de generar el reporte.',
         })
 
-    patient = get_object_or_404(Patient, pk=patient_id)
-    period = get_object_or_404(ExpensePeriod, pk=period_id, protocol=patient.protocol)
+    patient = get_object_or_404(
+        _scope_patient(request.user, Patient.objects.select_related('protocol')),
+        pk=patient_id,
+    )
+    period = get_object_or_404(
+        _scope_period(request.user, ExpensePeriod.objects.all()),
+        pk=period_id, protocol=patient.protocol,
+    )
 
     try:
         from .generators import generate_patient_pdf
         pdf_bytes = generate_patient_pdf(patient, period, request.user)
     except ValueError as e:
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': str(e),
         })
     except Exception as e:
         logger.exception("Error generando PDF de paciente %s: %s", patient_id, e)
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': f'Error al generar el PDF: {e}',
         })
 
@@ -91,25 +123,31 @@ def site_pdf(request):
 
     if not protocol_id or not period_id:
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': 'Seleccioná un protocolo y un período antes de generar el reporte.',
         })
 
-    protocol = get_object_or_404(Protocol, pk=protocol_id)
-    period = get_object_or_404(ExpensePeriod, pk=period_id, protocol=protocol)
+    protocol = get_object_or_404(
+        _scope_protocol(request.user, Protocol.objects.all()),
+        pk=protocol_id,
+    )
+    period = get_object_or_404(
+        _scope_period(request.user, ExpensePeriod.objects.all()),
+        pk=period_id, protocol=protocol,
+    )
 
     try:
         from .generators import generate_site_pdf
         pdf_bytes = generate_site_pdf(protocol, period, request.user)
     except ValueError as e:
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': str(e),
         })
     except Exception as e:
         logger.exception("Error generando PDF consolidado %s: %s", protocol_id, e)
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': f'Error al generar el PDF: {e}',
         })
 
@@ -134,25 +172,31 @@ def site_excel(request):
 
     if not protocol_id or not period_id:
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': 'Seleccioná un protocolo y un período antes de generar el reporte.',
         })
 
-    protocol = get_object_or_404(Protocol, pk=protocol_id)
-    period = get_object_or_404(ExpensePeriod, pk=period_id, protocol=protocol)
+    protocol = get_object_or_404(
+        _scope_protocol(request.user, Protocol.objects.all()),
+        pk=protocol_id,
+    )
+    period = get_object_or_404(
+        _scope_period(request.user, ExpensePeriod.objects.all()),
+        pk=period_id, protocol=protocol,
+    )
 
     try:
         from .generators import generate_site_excel
         xlsx_bytes = generate_site_excel(protocol, period, request.user)
     except ValueError as e:
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': str(e),
         })
     except Exception as e:
         logger.exception("Error generando Excel %s: %s", protocol_id, e)
         return render(request, 'reports/index.html', {
-            'protocols': _protocols_ctx(),
+            'protocols': _protocols_ctx(request.user),
             'error': f'Error al generar el Excel: {e}',
         })
 
@@ -176,6 +220,12 @@ def htmx_periods_for_protocol(request):
     protocol_id = request.GET.get('protocol')
     periods = []
     if protocol_id:
+        if not _is_global(request.user):
+            protocol = Protocol.objects.filter(
+                pk=protocol_id, site_id=request.user.site_id
+            ).first()
+            if not protocol:
+                return render(request, 'reports/partials/period_options.html', {'periods': []})
         periods = ExpensePeriod.objects.filter(
             protocol_id=protocol_id
         ).order_by('-date_from')
@@ -191,6 +241,12 @@ def htmx_patients_for_protocol(request):
     protocol_id = request.GET.get('protocol')
     patients = []
     if protocol_id:
+        if not _is_global(request.user):
+            protocol = Protocol.objects.filter(
+                pk=protocol_id, site_id=request.user.site_id
+            ).first()
+            if not protocol:
+                return render(request, 'reports/partials/patient_options.html', {'patients': []})
         patients = Patient.objects.filter(
             protocol_id=protocol_id, is_active=True
         ).order_by('patient_code')
@@ -207,7 +263,10 @@ def htmx_periods_for_patient(request):
     periods = []
     if patient_id:
         try:
-            patient = Patient.objects.select_related('protocol').get(pk=patient_id)
+            patient_qs = Patient.objects.select_related('protocol')
+            if not _is_global(request.user):
+                patient_qs = patient_qs.filter(protocol__site_id=request.user.site_id)
+            patient = patient_qs.get(pk=patient_id)
             periods = ExpensePeriod.objects.filter(
                 protocol=patient.protocol
             ).order_by('-date_from')
