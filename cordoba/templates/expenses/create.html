@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Cargar ticket{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+
+  <div class="mb-6">
+    <a href="{% url 'expenses:list' %}" class="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-sm mb-4">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>Mis gastos
+    </a>
+    <h1 class="text-2xl font-bold text-slate-900">Cargar ticket</h1>
+    <p class="text-slate-500 text-sm mt-1">Seleccioná el protocolo, paciente y visita, luego subí la foto del comprobante.</p>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" id="expense-form">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+      {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- PASO 1: Protocolo -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4">
+      <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-600 text-white text-xs font-bold">1</span>
+        Protocolo
+      </h2>
+      <select id="id_protocol" name="protocol"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              hx-get="{% url 'expenses:htmx_patients' %}"
+              hx-target="#patient-select-container"
+              hx-trigger="change"
+              hx-include="[name='protocol']"
+              required>
+        <option value="">— Seleccioná un protocolo —</option>
+        {% for protocol in protocols %}
+        <option value="{{ protocol.pk }}">{{ protocol.code }} — {{ protocol.name }}</option>
+        {% endfor %}
+      </select>
+      {% if form.protocol.errors %}
+      <p class="text-xs text-red-600 mt-1">{{ form.protocol.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <!-- PASO 2: Paciente (cargado por HTMX) -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4">
+      <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-600 text-white text-xs font-bold">2</span>
+        Paciente
+      </h2>
+      <div id="patient-select-container">
+        <select id="id_patient" name="patient"
+                class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-400 text-sm"
+                disabled
+                hx-get="{% url 'expenses:htmx_visits' %}"
+                hx-target="#visit-select-container"
+                hx-trigger="change"
+                hx-include="[name='patient']">
+          <option value="">— Primero elegí el protocolo —</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- PASO 3: Visita (cargada por HTMX) -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4">
+      <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-600 text-white text-xs font-bold">3</span>
+        Visita
+      </h2>
+      <div id="visit-select-container">
+        <select id="id_visit" name="visit"
+                class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-400 text-sm"
+                disabled>
+          <option value="">— Primero elegí el paciente —</option>
+        </select>
+      </div>
+      {% if form.visit.errors %}
+      <p class="text-xs text-red-600 mt-1">{{ form.visit.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <!-- PASO 4: Datos del gasto -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4">
+      <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-600 text-white text-xs font-bold">4</span>
+        Datos del gasto
+      </h2>
+
+      <div class="space-y-4">
+        <!-- Categoría -->
+        <div>
+          <label for="id_category" class="block text-sm font-medium text-slate-700 mb-1.5">Categoría</label>
+          <select name="category" id="id_category"
+                  class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            {% for val, label in form.category.field.choices %}
+            <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Fecha del gasto -->
+        <div>
+          <label for="id_expense_date" class="block text-sm font-medium text-slate-700 mb-1.5">Fecha del gasto</label>
+          <input type="date" name="expense_date" id="id_expense_date"
+                 value="{{ form.expense_date.value|default:'' }}"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                 required />
+        </div>
+
+        <!-- Descripción opcional -->
+        <div>
+          <label for="id_description" class="block text-sm font-medium text-slate-700 mb-1.5">
+            Descripción <span class="text-slate-400 font-normal">(opcional)</span>
+          </label>
+          <textarea name="description" id="id_description" rows="2"
+                    placeholder="Ej: Taxi al hospital, almuerzo reunión..."
+                    class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none">{{ form.description.value|default:'' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASO 5: Foto del ticket -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-6">
+      <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-600 text-white text-xs font-bold">5</span>
+        Foto del ticket
+      </h2>
+
+      <!-- Preview de imagen -->
+      <div id="image-preview-container" class="hidden mb-4">
+        <img id="image-preview" src="" alt="Preview del ticket"
+             class="w-full max-h-64 object-contain rounded-lg border border-slate-200 bg-slate-50" />
+        <button type="button" onclick="clearImage()"
+                class="mt-2 text-xs text-slate-500 hover:text-red-600 flex items-center gap-1">
+          <i data-lucide="x" class="h-3 w-3"></i>Cambiar foto
+        </button>
+      </div>
+
+      <!-- Input de archivo -->
+      <input type="file" name="ticket_file" id="ticket-file-input"
+             accept="image/*" capture="environment"
+             class="hidden"
+             onchange="previewImage(this)" required />
+
+      <div id="upload-placeholder">
+        <!-- Botón cámara (mobile) -->
+        <button type="button"
+                onclick="document.getElementById('ticket-file-input').click()"
+                class="w-full flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-300 hover:border-primary-400 rounded-xl py-8 px-4 transition-colors cursor-pointer bg-slate-50 hover:bg-primary-50">
+          <div class="p-3 bg-primary-100 rounded-full">
+            <i data-lucide="camera" class="h-6 w-6 text-primary-600"></i>
+          </div>
+          <div class="text-center">
+            <p class="text-sm font-medium text-slate-700">Tomar foto o subir imagen</p>
+            <p class="text-xs text-slate-400 mt-1">JPG, PNG, HEIC — Máx. 10 MB</p>
+          </div>
+        </button>
+      </div>
+
+      {% if form.ticket_file.errors %}
+      <p class="text-xs text-red-600 mt-2">{{ form.ticket_file.errors.0 }}</p>
+      {% endif %}
+    </div>
+
+    <!-- Botón submit -->
+    <button type="submit" id="submit-btn"
+            class="w-full bg-primary-700 hover:bg-primary-800 active:bg-primary-900 text-white font-semibold py-3.5 px-6 rounded-xl text-base transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+      <span id="submit-label" class="flex items-center justify-center gap-2">
+        <i data-lucide="upload" class="h-5 w-5"></i>
+        Subir ticket y procesar OCR
+      </span>
+      <span id="submit-loading" class="hidden flex items-center justify-center gap-2">
+        <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        Procesando…
+      </span>
+    </button>
+
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewImage(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('image-preview').src = e.target.result;
+      document.getElementById('image-preview-container').classList.remove('hidden');
+      document.getElementById('upload-placeholder').classList.add('hidden');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function clearImage() {
+  document.getElementById('ticket-file-input').value = '';
+  document.getElementById('image-preview').src = '';
+  document.getElementById('image-preview-container').classList.add('hidden');
+  document.getElementById('upload-placeholder').classList.remove('hidden');
+}
+
+// Mostrar spinner al enviar
+document.getElementById('expense-form').addEventListener('submit', function() {
+  document.getElementById('submit-label').classList.add('hidden');
+  document.getElementById('submit-loading').classList.remove('hidden');
+  document.getElementById('submit-btn').disabled = true;
+});
+
+// Re-inicializar Lucide después de que HTMX actualice el DOM
+document.body.addEventListener('htmx:afterSettle', function() {
+  lucide.createIcons();
+  // Habilitar y limpiar selects cargados por HTMX
+  const patientSelect = document.querySelector('#patient-select-container select');
+  if (patientSelect) {
+    patientSelect.removeAttribute('disabled');
+  }
+  const visitSelect = document.querySelector('#visit-select-container select');
+  if (visitSelect) {
+    visitSelect.removeAttribute('disabled');
+  }
+});
+</script>
+{% endblock %}

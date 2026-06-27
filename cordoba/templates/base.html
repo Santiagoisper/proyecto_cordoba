@@ -92,10 +92,10 @@
         {% if user.is_assistant or user.is_coordinator or user.is_site_admin or user.is_superuser %}
         <div class="pt-2">
           <p class="px-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Gastos</p>
-          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
+          <a href="{% url 'expenses:create' %}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
             <i data-lucide="camera" class="h-4 w-4 shrink-0"></i>Cargar ticket
           </a>
-          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
+          <a href="{% url 'expenses:list' %}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
             <i data-lucide="list" class="h-4 w-4 shrink-0"></i>Mis gastos
           </a>
         </div>
@@ -162,6 +162,14 @@
           <a href="{% url 'dashboard:index' %}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50">
             <i data-lucide="layout-dashboard" class="h-4 w-4"></i> Dashboard
           </a>
+          {% if user.is_assistant or user.is_coordinator or user.is_site_admin or user.is_superuser %}
+          <a href="{% url 'expenses:create' %}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50">
+            <i data-lucide="camera" class="h-4 w-4"></i> Cargar ticket
+          </a>
+          <a href="{% url 'expenses:list' %}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50">
+            <i data-lucide="list" class="h-4 w-4"></i> Mis gastos
+          </a>
+          {% endif %}
         </nav>
       </aside>
     </div>

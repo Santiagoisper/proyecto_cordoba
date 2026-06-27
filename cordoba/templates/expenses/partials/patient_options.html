@@ -1,0 +1,18 @@
+<select id="id_patient" name="patient"
+        class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        hx-get="{% url 'expenses:htmx_visits' %}"
+        hx-target="#visit-select-container"
+        hx-trigger="change"
+        hx-include="[name='patient']"
+        {% if not patients %}disabled{% endif %}>
+  {% if patients %}
+  <option value="">— Seleccioná un paciente —</option>
+  {% for patient in patients %}
+  <option value="{{ patient.pk }}">
+    {{ patient.patient_code }}{% if patient.initials %} ({{ patient.initials }}){% endif %}
+  </option>
+  {% endfor %}
+  {% else %}
+  <option value="">— Sin pacientes activos en este protocolo —</option>
+  {% endif %}
+</select>

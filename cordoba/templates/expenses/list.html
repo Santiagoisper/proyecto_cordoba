@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">{{ title }}</h1>
+      <p class="text-slate-500 text-sm mt-1">Últimos 50 registros</p>
+    </div>
+    <a href="{% url 'expenses:create' %}"
+       class="flex items-center gap-2 bg-primary-700 hover:bg-primary-800 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors shadow-sm">
+      <i data-lucide="plus" class="h-4 w-4"></i>
+      Nuevo ticket
+    </a>
+  </div>
+
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+
+    {% if expenses %}
+    <!-- Desktop table -->
+    <div class="hidden sm:block overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-slate-100 bg-slate-50">
+            <th class="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Paciente</th>
+            <th class="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Categoría</th>
+            <th class="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha</th>
+            <th class="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Monto</th>
+            <th class="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado</th>
+            <th class="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for expense in expenses %}
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-5 py-3.5">
+              <p class="font-medium text-slate-800">{{ expense.visit.patient.patient_code }}</p>
+              <p class="text-xs text-slate-500">{{ expense.visit.patient.protocol.code }}</p>
+            </td>
+            <td class="px-4 py-3.5">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">
+                {% if expense.category == 'transport' %}<i data-lucide="bus" class="h-3 w-3"></i>
+                {% elif expense.category == 'meals' %}<i data-lucide="utensils" class="h-3 w-3"></i>
+                {% elif expense.category == 'accommodation' %}<i data-lucide="hotel" class="h-3 w-3"></i>
+                {% else %}<i data-lucide="receipt" class="h-3 w-3"></i>{% endif %}
+                {{ expense.get_category_display }}
+              </span>
+            </td>
+            <td class="px-4 py-3.5 text-slate-600">{{ expense.expense_date|date:"d/m/Y" }}</td>
+            <td class="px-4 py-3.5 text-right font-semibold text-slate-800">
+              ${{ expense.amount|floatformat:2 }}
+              <span class="text-xs font-normal text-slate-400 ml-0.5">{{ expense.currency }}</span>
+            </td>
+            <td class="px-4 py-3.5">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                {% if expense.status == 'approved' %}bg-green-100 text-green-700
+                {% elif expense.status == 'rejected' %}bg-red-100 text-red-700
+                {% elif expense.status == 'observed' %}bg-amber-100 text-amber-700
+                {% elif expense.status == 'ocr_pending' %}bg-purple-100 text-purple-700
+                {% else %}bg-slate-100 text-slate-600{% endif %}">
+                {{ expense.get_status_display }}
+              </span>
+            </td>
+            <td class="px-4 py-3.5 text-right">
+              {% if expense.status == 'ocr_pending' or expense.status == 'pending_review' %}
+              <a href="{% url 'expenses:review' expense.pk %}"
+                 class="text-xs text-primary-600 hover:text-primary-800 font-medium">Revisar</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile list -->
+    <div class="sm:hidden divide-y divide-slate-100">
+      {% for expense in expenses %}
+      <div class="px-4 py-4 flex items-center justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-sm font-semibold text-slate-800">{{ expense.visit.patient.patient_code }}</span>
+            <span class="text-xs text-slate-400">{{ expense.visit.patient.protocol.code }}</span>
+          </div>
+          <p class="text-xs text-slate-500">{{ expense.get_category_display }} — {{ expense.expense_date|date:"d/m/Y" }}</p>
+        </div>
+        <div class="text-right shrink-0">
+          <p class="text-sm font-bold text-slate-800">${{ expense.amount|floatformat:0 }}</p>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+            {% if expense.status == 'approved' %}bg-green-100 text-green-700
+            {% elif expense.status == 'rejected' %}bg-red-100 text-red-700
+            {% elif expense.status == 'observed' %}bg-amber-100 text-amber-700
+            {% elif expense.status == 'ocr_pending' %}bg-purple-100 text-purple-700
+            {% else %}bg-slate-100 text-slate-600{% endif %}">
+            {{ expense.get_status_display }}
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="px-6 py-14 text-center">
+      <i data-lucide="receipt" class="h-12 w-12 text-slate-200 mx-auto mb-4"></i>
+      <p class="text-slate-500 font-medium">No hay gastos cargados</p>
+      <p class="text-slate-400 text-sm mt-1 mb-6">Empezá cargando el primer ticket</p>
+      <a href="{% url 'expenses:create' %}"
+         class="inline-flex items-center gap-2 bg-primary-700 hover:bg-primary-800 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
+        <i data-lucide="plus" class="h-4 w-4"></i>
+        Cargar primer ticket
+      </a>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

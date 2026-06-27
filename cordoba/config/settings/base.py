@@ -98,6 +98,26 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ─── Celery ───────────────────────────────────────────────────────────────────
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 120
+# En desarrollo (DEBUG=True) las tareas se ejecutan síncronamente (sin worker).
+# Sobreescribir con CELERY_TASK_ALWAYS_EAGER=False en producción.
+CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=True)
+CELERY_TASK_EAGER_PROPAGATES = True
+
+# ─── Veryfi OCR ───────────────────────────────────────────────────────────────
+VERYFI_CLIENT_ID = env('VERYFI_CLIENT_ID', default='')
+VERYFI_CLIENT_SECRET = env('VERYFI_CLIENT_SECRET', default='')
+VERYFI_USERNAME = env('VERYFI_USERNAME', default='')
+VERYFI_API_KEY = env('VERYFI_API_KEY', default='')
+
 AUTH_USER_MODEL = 'accounts.User'
 
 SITE_ID = 1

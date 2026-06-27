@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Revisar ticket — {{ expense.visit.patient.patient_code }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+
+  <div class="mb-6">
+    <a href="{% url 'expenses:list' %}" class="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-sm mb-4">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>Mis gastos
+    </a>
+    <h1 class="text-2xl font-bold text-slate-900">Revisar ticket</h1>
+    <p class="text-slate-500 text-sm mt-1">
+      {{ expense.visit.patient.protocol.code }} — Paciente <strong>{{ expense.visit.patient.patient_code }}</strong> — {{ expense.visit.visit_type.name }}
+    </p>
+  </div>
+
+  {% if is_mock %}
+  <div class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 text-sm text-amber-800">
+    <i data-lucide="flask-conical" class="h-4 w-4 mt-0.5 shrink-0"></i>
+    <div>
+      <strong>Modo desarrollo</strong> — OCR desactivado (sin credenciales Veryfi). Completá los campos manualmente.
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+
+    <!-- Columna imagen -->
+    <div class="lg:col-span-2">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sticky top-4">
+        <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Ticket original</h2>
+        {% if ticket and ticket.file %}
+        <img src="{{ ticket.file.url }}" alt="Ticket"
+             class="w-full rounded-lg object-contain max-h-80 bg-slate-50 border border-slate-100"
+             onclick="this.classList.toggle('max-h-80')" style="cursor:zoom-in" />
+        <p class="text-xs text-slate-400 text-center mt-2">Tocá para ampliar</p>
+        {% else %}
+        <div class="flex items-center justify-center h-40 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+          <div class="text-center">
+            <i data-lucide="image-off" class="h-8 w-8 text-slate-300 mx-auto mb-2"></i>
+            <p class="text-xs text-slate-400">Sin imagen</p>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if not is_mock %}
+        <!-- Campos OCR adicionales (sólo lectura) -->
+        <div class="mt-4 space-y-2">
+          <div>
+            <p class="text-xs text-slate-400 mb-1">CUIT detectado</p>
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-sm text-slate-700">{{ cuit|default:"—" }}</span>
+              {% if cuit %}
+              <span class="text-xs px-1.5 py-0.5 rounded border {{ badge_class 'cuit' }} font-medium">
+                {{ badge_label 'cuit' }}
+              </span>
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400 mb-1">Nro. comprobante</p>
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-sm text-slate-700">{{ receipt_number|default:"—" }}</span>
+              {% if receipt_number %}
+              <span class="text-xs px-1.5 py-0.5 rounded border {{ badge_class 'receipt' }} font-medium">
+                {{ badge_label 'receipt' }}
+              </span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Columna formulario -->
+    <div class="lg:col-span-3">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <h2 class="text-sm font-semibold text-slate-700 mb-1">Confirmá o corregí los datos</h2>
+        <p class="text-xs text-slate-400 mb-5">Los campos marcados en rojo requieren tu atención.</p>
+
+        <form method="post">
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+          <div class="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+            {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+          </div>
+          {% endif %}
+
+          <div class="space-y-5">
+
+            <!-- Categoría -->
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1.5">Categoría</label>
+              {{ form.category }}
+              {% if form.category.errors %}<p class="text-xs text-red-600 mt-1">{{ form.category.errors.0 }}</p>{% endif %}
+            </div>
+
+            <!-- Monto -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-sm font-medium text-slate-700">Monto</label>
+                {% if not is_mock %}
+                <span class="text-xs px-2 py-0.5 rounded-full border {{ badge_class 'amount' }} font-medium">
+                  {{ badge_label 'amount' }}
+                </span>
+                {% endif %}
+              </div>
+              <div class="flex gap-2">
+                <div class="w-24">{{ form.currency }}</div>
+                <div class="flex-1">{{ form.amount }}</div>
+              </div>
+              {% if form.amount.errors %}<p class="text-xs text-red-600 mt-1">{{ form.amount.errors.0 }}</p>{% endif %}
+            </div>
+
+            <!-- Fecha -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-sm font-medium text-slate-700">Fecha del ticket</label>
+                {% if not is_mock %}
+                <span class="text-xs px-2 py-0.5 rounded-full border {{ badge_class 'date' }} font-medium">
+                  {{ badge_label 'date' }}
+                </span>
+                {% endif %}
+              </div>
+              {{ form.expense_date }}
+              {% if form.expense_date.errors %}<p class="text-xs text-red-600 mt-1">{{ form.expense_date.errors.0 }}</p>{% endif %}
+            </div>
+
+            <!-- Proveedor -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-sm font-medium text-slate-700">Comercio / Proveedor</label>
+                {% if not is_mock %}
+                <span class="text-xs px-2 py-0.5 rounded-full border {{ badge_class 'vendor' }} font-medium">
+                  {{ badge_label 'vendor' }}
+                </span>
+                {% endif %}
+              </div>
+              {{ form.vendor }}
+              {% if form.vendor.errors %}<p class="text-xs text-red-600 mt-1">{{ form.vendor.errors.0 }}</p>{% endif %}
+            </div>
+
+            <!-- Descripción -->
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1.5">
+                Descripción <span class="text-slate-400 font-normal">(opcional)</span>
+              </label>
+              {{ form.description }}
+            </div>
+
+          </div>
+
+          <!-- Acciones -->
+          <div class="flex flex-col sm:flex-row gap-3 mt-6 pt-5 border-t border-slate-100">
+            <button type="submit"
+                    class="flex-1 bg-primary-700 hover:bg-primary-800 text-white font-semibold py-3 px-6 rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2">
+              <i data-lucide="send" class="h-4 w-4"></i>
+              Confirmar y enviar al coordinador
+            </button>
+            <a href="{% url 'expenses:list' %}"
+               class="flex-1 text-center border border-slate-300 text-slate-600 hover:bg-slate-50 font-medium py-3 px-6 rounded-xl text-sm transition-colors">
+              Cancelar
+            </a>
+          </div>
+
+        </form>
+      </div>
+
+      <!-- Info de la visita -->
+      <div class="mt-4 bg-slate-50 rounded-xl border border-slate-200 px-5 py-4">
+        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Datos de la visita</h3>
+        <dl class="grid grid-cols-2 gap-y-2 text-sm">
+          <dt class="text-slate-500">Protocolo</dt>
+          <dd class="text-slate-800 font-medium">{{ expense.visit.patient.protocol.code }}</dd>
+          <dt class="text-slate-500">Paciente</dt>
+          <dd class="text-slate-800 font-medium font-mono">{{ expense.visit.patient.patient_code }}</dd>
+          <dt class="text-slate-500">Visita</dt>
+          <dd class="text-slate-800">{{ expense.visit.visit_type.name }}</dd>
+          <dt class="text-slate-500">Fecha programada</dt>
+          <dd class="text-slate-800">{{ expense.visit.scheduled_date|date:"d/m/Y" }}</dd>
+        </dl>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

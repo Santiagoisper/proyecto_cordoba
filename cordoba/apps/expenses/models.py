@@ -59,7 +59,8 @@ class Expense(models.Model):
     ]
 
     STATUS_CHOICES = [
-        ('pending', 'Pendiente de revisión'),
+        ('ocr_pending', 'Procesando OCR'),
+        ('pending_review', 'Pendiente de revisión'),
         ('approved', 'Aprobado'),
         ('rejected', 'Rechazado'),
         ('observed', 'Observado'),
@@ -74,16 +75,17 @@ class Expense(models.Model):
     )
 
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     currency = models.CharField(max_length=3, default='ARS')
     expense_date = models.DateField(help_text="Fecha del gasto según el ticket")
     description = models.CharField(max_length=500, blank=True)
     vendor = models.CharField(max_length=200, blank=True, help_text="Nombre del comercio o proveedor")
 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ocr_pending')
 
-    ocr_raw_data = models.JSONField(null=True, blank=True, help_text="Datos crudos del OCR")
-    ocr_confidence = models.FloatField(null=True, blank=True, help_text="Confianza del OCR (0-1)")
+    # Datos crudos del OCR (incluye extracted + confidence como JSON anidado)
+    ocr_raw_data = models.JSONField(null=True, blank=True, help_text="Datos del OCR (extracted + confidence)")
+    ocr_confidence = models.FloatField(null=True, blank=True, help_text="Confianza global del OCR (0-1)")
     ocr_processed_at = models.DateTimeField(null=True, blank=True)
 
     submitted_by = models.ForeignKey(
@@ -112,6 +114,30 @@ class Expense(models.Model):
             f"{self.visit.patient} — {self.get_category_display()} "
             f"${self.amount} ({self.expense_date})"
         )
+
+    @property
+    def ocr_extracted(self) -> dict:
+        """Devuelve el dict de campos extraídos por OCR."""
+        if self.ocr_raw_data and 'extracted' in self.ocr_raw_data:
+            return self.ocr_raw_data['extracted']
+        return {}
+
+    @property
+    def ocr_confidence_per_field(self) -> dict:
+        """Devuelve el dict de confianza por campo."""
+        if self.ocr_raw_data and 'confidence' in self.ocr_raw_data:
+            return self.ocr_raw_data['confidence']
+        return {}
+
+    def confidence_badge(self, field: str) -> str:
+        """Retorna clase CSS del badge según nivel de confianza del campo."""
+        confidence = self.ocr_confidence_per_field.get(field, 0.0)
+        if confidence >= 0.7:
+            return 'green'
+        elif confidence >= 0.4:
+            return 'yellow'
+        else:
+            return 'red'
 
 
 class TicketFile(models.Model):
@@ -167,6 +193,8 @@ class AuditLog(models.Model):
         ('approved', 'Aprobado'),
         ('rejected', 'Rechazado'),
         ('observed', 'Observado'),
+        ('ocr_completed', 'OCR completado'),
+        ('ocr_failed', 'OCR fallido'),
         ('period_closed', 'Período cerrado'),
         ('pdf_generated', 'PDF generado'),
         ('login', 'Inicio de sesión'),

@@ -1,0 +1,16 @@
+<select id="id_visit" name="visit"
+        class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        {% if not visits %}disabled{% endif %}
+        required>
+  {% if visits %}
+  <option value="">— Seleccioná una visita —</option>
+  {% for visit in visits %}
+  <option value="{{ visit.pk }}">
+    {{ visit.visit_type.name }} — {{ visit.scheduled_date|date:"d/m/Y" }}
+    {% if visit.status != 'scheduled' %}({{ visit.get_status_display }}){% endif %}
+  </option>
+  {% endfor %}
+  {% else %}
+  <option value="">— Sin visitas registradas —</option>
+  {% endif %}
+</select>
