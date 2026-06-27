@@ -91,9 +91,11 @@ def _mark_expenses_exported(expenses, user, report_type: str, report_label: str)
         )
         for exp in expenses
     ])
-    # Actualizar status en bulk
+    # Actualizar status en bulk — incluye approved y settled, no toca los ya exportados
     from apps.expenses.models import Expense
-    Expense.objects.filter(pk__in=expense_ids, status='approved').update(status='exported')
+    Expense.objects.filter(
+        pk__in=expense_ids, status__in=('approved', 'settled')
+    ).update(status='exported')
 
 
 # ─── PDF por paciente ──────────────────────────────────────────────────────────

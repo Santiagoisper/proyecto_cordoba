@@ -36,7 +36,7 @@ def patient_pdf(request, patient_id, period_id):
         return HttpResponseForbidden("No tenés permiso para generar reportes.")
 
     patient = get_object_or_404(Patient, pk=patient_id)
-    period = get_object_or_404(ExpensePeriod, pk=period_id)
+    period = get_object_or_404(ExpensePeriod, pk=period_id, protocol=patient.protocol)
 
     try:
         from .generators import generate_patient_pdf
