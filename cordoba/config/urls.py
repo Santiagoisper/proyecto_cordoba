@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.generic import RedirectView
+from django.views.generic import RedirectView, TemplateView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -16,6 +16,14 @@ urlpatterns = [
     path('protocols/', include('apps.protocols.urls')),
     path('reports/', include('apps.reports.urls')),
     path('periods/', include('apps.expenses.period_urls')),
+    # PWA — service worker served from root so its scope covers the full app
+    path('sw.js', TemplateView.as_view(
+        template_name='sw.js',
+        content_type='application/javascript; charset=utf-8',
+    ), name='sw'),
+    path('offline.html', TemplateView.as_view(
+        template_name='offline.html',
+    ), name='offline'),
     path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
 ]
 

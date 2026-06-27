@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sin conexión — Viáticos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+  <div class="text-center max-w-sm">
+    <div class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-blue-100">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-blue-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M18.364 5.636a9 9 0 010 12.728M15.536 8.464a5 5 0 010 7.072M6.343 17.657a9 9 0 010-12.728M8.464 15.536a5 5 0 010-7.072M12 12h.01" />
+      </svg>
+    </div>
+    <h1 class="text-xl font-semibold text-slate-800 mb-2">Sin conexión</h1>
+    <p class="text-slate-500 text-sm mb-6">
+      No hay conexión a internet. Cuando vuelvas a tener señal, recargá la app y tus datos van a estar disponibles.
+    </p>
+    <button onclick="window.location.reload()"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-blue-800 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+      Reintentar
+    </button>
+  </div>
+</body>
+</html>

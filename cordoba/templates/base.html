@@ -34,6 +34,15 @@
   <!-- Lucide Icons -->
   <script src="{% static 'js/lucide.min.js' %}"></script>
 
+  <!-- PWA -->
+  <link rel="manifest" href="{% static 'manifest.json' %}">
+  <meta name="theme-color" content="#1e40af">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Viáticos">
+  <link rel="apple-touch-icon" href="{% static 'img/icon-192.png' %}">
+
   {% block extra_head %}{% endblock %}
 </head>
 
@@ -212,6 +221,11 @@
     document.body.addEventListener('htmx:afterSettle', function() {
       lucide.createIcons();
     });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function(err) {
+        console.warn('SW registration failed:', err);
+      });
+    }
   </script>
 
   {% block extra_js %}{% endblock %}
