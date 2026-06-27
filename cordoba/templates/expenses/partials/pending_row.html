@@ -1,3 +1,4 @@
+{% load currency_tags %}
 <tr id="expense-row-{{ item.expense.pk }}" class="hover:bg-slate-50 transition-colors">
 
   <!-- Thumbnail del ticket -->
@@ -56,7 +57,7 @@
 
   <!-- Monto -->
   <td class="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
-    ${{ item.expense.amount|floatformat:2 }}
+    ${{ item.expense.amount|ars }}
     <p class="text-xs text-slate-500 font-normal">{{ item.expense.currency }}</p>
   </td>
 
@@ -100,7 +101,7 @@
         hx-post="{% url 'expenses:approve' item.expense.pk %}"
         hx-target="#expense-row-{{ item.expense.pk }}"
         hx-swap="outerHTML"
-        hx-confirm="¿Aprobar el gasto de ${{ item.expense.amount|floatformat:2 }} ({{ item.expense.get_category_display }})?"
+        hx-confirm="¿Aprobar el gasto de ${{ item.expense.amount|ars }} ({{ item.expense.get_category_display }})?"
         class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-green-600 hover:bg-green-700 text-white transition-colors">
         <i data-lucide="check" class="h-3.5 w-3.5"></i> Aprobar
       </button>

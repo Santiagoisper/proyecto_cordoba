@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_tags %}
 
 {% block title %}Dashboard — Coordinador{% endblock %}
 
@@ -267,7 +268,7 @@
           {% endif %}
         </div>
         <div class="text-right shrink-0">
-          <p class="font-bold text-slate-900">${{ expense.amount|floatformat:2 }}</p>
+          <p class="font-bold text-slate-900">${{ expense.amount|ars }}</p>
           <p class="text-xs text-slate-500">{{ expense.expense_date|date:"d/m/Y" }}</p>
           <a href="{% url 'expenses:detail' expense.pk %}"
              class="inline-block mt-1 text-xs text-blue-600 hover:underline">Ver detalle →</a>

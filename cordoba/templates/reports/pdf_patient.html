@@ -1,3 +1,4 @@
+{% load currency_tags %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -115,10 +116,10 @@
         <td>{{ exp.vendor|default:"—" }}</td>
         <td>{{ exp.ocr_extracted.cuit|default:"—" }}</td>
         <td>{{ exp.ocr_extracted.receipt_number|default:"—" }}</td>
-        <td class="amount">${{ exp.amount|floatformat:2 }} {{ exp.currency }}</td>
+        <td class="amount">${{ exp.amount|ars }} {{ exp.currency }}</td>
         <td class="amount">
           {% if exp.ocr_extracted.iva %}
-            ${{ exp.ocr_extracted.iva|floatformat:2 }}
+            ${{ exp.ocr_extracted.iva|ars }}
           {% else %}—{% endif %}
         </td>
         <td>
@@ -143,12 +144,12 @@
     {% for cat_key, cat_data in totals.by_category.items %}
     <tr>
       <td>{{ cat_data.label }}</td>
-      <td>${{ cat_data.amount|floatformat:2 }}</td>
+      <td>${{ cat_data.amount|ars }}</td>
     </tr>
     {% endfor %}
     <tr class="grand-total">
       <td>TOTAL GENERAL</td>
-      <td>${{ totals.total|floatformat:2 }}</td>
+      <td>${{ totals.total|ars }}</td>
     </tr>
   </table>
 

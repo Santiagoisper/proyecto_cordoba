@@ -1,3 +1,4 @@
+{% load currency_tags %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -106,17 +107,17 @@
       {% for row in executive_summary %}
       <tr>
         <td>{{ row.patient_code }}</td>
-        <td>${{ row.totals_by_cat.transport.amount|default:"0.00"|floatformat:2 }}</td>
-        <td>${{ row.totals_by_cat.meals.amount|default:"0.00"|floatformat:2 }}</td>
-        <td>${{ row.totals_by_cat.accommodation.amount|default:"0.00"|floatformat:2 }}</td>
-        <td>${{ row.totals_by_cat.other.amount|default:"0.00"|floatformat:2 }}</td>
-        <td>${{ row.total|floatformat:2 }}</td>
+        <td>${{ row.totals_by_cat.transport.amount|default:"0.00"|ars }}</td>
+        <td>${{ row.totals_by_cat.meals.amount|default:"0.00"|ars }}</td>
+        <td>${{ row.totals_by_cat.accommodation.amount|default:"0.00"|ars }}</td>
+        <td>${{ row.totals_by_cat.other.amount|default:"0.00"|ars }}</td>
+        <td>${{ row.total|ars }}</td>
       </tr>
       {% endfor %}
       <tr class="grand-total">
         <td>TOTAL GENERAL</td>
         <td colspan="4"></td>
-        <td>${{ grand_total|floatformat:2 }}</td>
+        <td>${{ grand_total|ars }}</td>
       </tr>
     </tbody>
   </table>
@@ -160,7 +161,7 @@
         <td>{{ exp.vendor|default:"—" }}</td>
         <td>{{ exp.ocr_extracted.cuit|default:"—" }}</td>
         <td>{{ exp.ocr_extracted.receipt_number|default:"—" }}</td>
-        <td class="amount">${{ exp.amount|floatformat:2 }}</td>
+        <td class="amount">${{ exp.amount|ars }}</td>
         <td>
           {% if row.ticket_b64 %}
             <img src="{{ row.ticket_b64 }}" class="ticket-thumb" alt="Ticket" />
@@ -173,7 +174,7 @@
       {% endfor %}
       <tr class="patient-total-row">
         <td colspan="6" style="text-align:right;">SUBTOTAL {{ section.patient.patient_code }}</td>
-        <td class="amount">${{ section.totals.total|floatformat:2 }}</td>
+        <td class="amount">${{ section.totals.total|ars }}</td>
         <td></td>
       </tr>
     </tbody>

@@ -1,3 +1,4 @@
+{% load currency_tags %}
 <!-- Modal overlay -->
 <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
      id="action-modal-overlay"
@@ -27,7 +28,7 @@
       <p class="text-sm text-slate-600">
         <span class="font-medium">{{ expense.visit.patient }}</span>
         · {{ expense.get_category_display }}
-        · ${{ expense.amount|floatformat:2 }}
+        · ${{ expense.amount|ars }}
         · {{ expense.expense_date|date:"d/m/Y" }}
       </p>
     </div>

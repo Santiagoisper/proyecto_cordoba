@@ -37,7 +37,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 
-<body class="h-full" hx-boost="true">
+<body class="h-full">
 
   <!-- Navbar superior -->
   <nav class="bg-primary-800 border-b border-primary-900">
@@ -116,11 +116,11 @@
 
         {% if user.is_site_admin or user.is_superuser %}
         <div class="pt-2">
-          <p class="px-3 pb-1 text-xs font-semibond text-slate-400 uppercase tracking-wider">Administración</p>
-          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
+          <p class="px-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Administración</p>
+          <a href="/admin/protocols/protocol/" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
             <i data-lucide="flask-conical" class="h-4 w-4 shrink-0"></i>Protocolos
           </a>
-          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
+          <a href="/admin/patients/patient/" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
             <i data-lucide="users" class="h-4 w-4 shrink-0"></i>Pacientes
           </a>
         </div>

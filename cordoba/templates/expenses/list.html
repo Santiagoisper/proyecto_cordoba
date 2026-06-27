@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_tags %}
 
 {% block title %}{{ title }}{% endblock %}
 
@@ -51,7 +52,7 @@
             </td>
             <td class="px-4 py-3.5 text-slate-600">{{ expense.expense_date|date:"d/m/Y" }}</td>
             <td class="px-4 py-3.5 text-right font-semibold text-slate-800">
-              ${{ expense.amount|floatformat:2 }}
+              ${{ expense.amount|ars }}
               <span class="text-xs font-normal text-slate-400 ml-0.5">{{ expense.currency }}</span>
             </td>
             <td class="px-4 py-3.5">
@@ -88,7 +89,7 @@
           <p class="text-xs text-slate-500">{{ expense.get_category_display }} — {{ expense.expense_date|date:"d/m/Y" }}</p>
         </div>
         <div class="text-right shrink-0">
-          <p class="text-sm font-bold text-slate-800">${{ expense.amount|floatformat:0 }}</p>
+          <p class="text-sm font-bold text-slate-800">${{ expense.amount|ars }}</p>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
             {% if expense.status == 'approved' %}bg-green-100 text-green-700
             {% elif expense.status == 'rejected' %}bg-red-100 text-red-700

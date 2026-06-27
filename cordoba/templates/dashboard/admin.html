@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_tags %}
 
 {% block title %}Dashboard — Admin{% endblock %}
 
@@ -75,7 +76,7 @@
         </div>
         <div class="flex items-center gap-3 shrink-0">
           <span class="text-sm font-semibold text-slate-800">
-            ${{ expense.amount|floatformat:2 }} {{ expense.currency }}
+            ${{ expense.amount|ars }} {{ expense.currency }}
           </span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
             {% if expense.status == 'approved' %}bg-green-100 text-green-700
