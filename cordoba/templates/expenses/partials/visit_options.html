@@ -1,16 +1,21 @@
-<select id="id_visit" name="visit"
+<select id="id_visit_type_id" name="visit_type_id"
         class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        {% if not visits %}disabled{% endif %}
+        {% if not visit_type_rows %}disabled{% endif %}
         required>
-  {% if visits %}
-  <option value="">— Seleccioná una visita —</option>
-  {% for visit in visits %}
-  <option value="{{ visit.pk }}">
-    {{ visit.visit_type.name }} — {{ visit.scheduled_date|date:"d/m/Y" }}
-    {% if visit.status != 'scheduled' %}({{ visit.get_status_display }}){% endif %}
+  {% if visit_type_rows %}
+  <option value="">— Seleccioná la visita —</option>
+  {% for row in visit_type_rows %}
+  <option value="{{ row.visit_type.pk }}"
+          {% if row.is_locked %}disabled class="text-slate-400"{% endif %}>
+    {% if row.is_locked %}🔒 {% endif %}{{ row.visit_type.name }}{% if row.is_locked %} — ya tiene comprobante{% endif %}
   </option>
   {% endfor %}
   {% else %}
-  <option value="">— Sin visitas registradas —</option>
+  <option value="">— Primero elegí el paciente —</option>
   {% endif %}
 </select>
+{% if visit_type_rows %}
+<p class="text-xs text-slate-400 mt-1.5">
+  Las visitas con 🔒 ya tienen un comprobante activo.
+</p>
+{% endif %}

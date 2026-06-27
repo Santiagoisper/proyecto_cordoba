@@ -43,7 +43,17 @@
       {% if form.protocol.errors %}
       <p class="text-xs text-red-600 mt-1">{{ form.protocol.errors.0 }}</p>
       {% endif %}
+
+      <!-- Panel de info del protocolo (poblado por HTMX) -->
+      <div id="protocol-info-container"></div>
     </div>
+
+    <!-- Elemento oculto que escucha el cambio de protocolo y carga el panel de info -->
+    <div class="hidden"
+         hx-get="{% url 'expenses:htmx_protocol_info' %}"
+         hx-trigger="change from:#id_protocol"
+         hx-target="#protocol-info-container"
+         hx-include="#id_protocol"></div>
 
     <!-- PASO 2: Paciente (cargado por HTMX) -->
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4">
@@ -71,14 +81,14 @@
         Visita
       </h2>
       <div id="visit-select-container">
-        <select id="id_visit" name="visit"
+        <select id="id_visit_type_id" name="visit_type_id"
                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-400 text-sm"
                 disabled>
           <option value="">— Primero elegí el paciente —</option>
         </select>
       </div>
-      {% if form.visit.errors %}
-      <p class="text-xs text-red-600 mt-1">{{ form.visit.errors.0 }}</p>
+      {% if form.visit_type_id.errors %}
+      <p class="text-xs text-red-600 mt-1">{{ form.visit_type_id.errors.0 }}</p>
       {% endif %}
     </div>
 
@@ -237,10 +247,9 @@ document.getElementById('expense-form').addEventListener('submit', function() {
   document.getElementById('submit-btn').disabled = true;
 });
 
-// Re-inicializar Lucide después de que HTMX actualice el DOM
+// Re-inicializar Lucide y habilitar selects después de swaps HTMX
 document.body.addEventListener('htmx:afterSettle', function() {
   lucide.createIcons();
-  // Habilitar y limpiar selects cargados por HTMX
   const patientSelect = document.querySelector('#patient-select-container select');
   if (patientSelect) {
     patientSelect.removeAttribute('disabled');

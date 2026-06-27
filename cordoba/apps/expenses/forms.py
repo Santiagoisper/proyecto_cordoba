@@ -9,9 +9,9 @@ _TEXTAREA = _INPUT + ' resize-none'
 class ExpenseCreateForm(forms.Form):
     """Formulario de carga de gasto con ticket."""
     protocol = forms.IntegerField(widget=forms.HiddenInput())
-    visit = forms.IntegerField(
+    visit_type_id = forms.IntegerField(
         label='Visita',
-        widget=forms.Select(attrs={'class': _INPUT, 'id': 'id_visit'})
+        widget=forms.Select(attrs={'class': _INPUT, 'id': 'id_visit_type_id'})
     )
     category = forms.ChoiceField(
         label='Categoría',

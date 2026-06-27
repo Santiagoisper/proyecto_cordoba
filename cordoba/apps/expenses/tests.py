@@ -547,26 +547,27 @@ class MultisiteIsolationTest(TestCase):
         url = reverse('expenses:htmx_visits')
         resp = self.client.get(url, {'patient': self.patient_b.pk})
         self.assertEqual(resp.status_code, 200)
-        self.assertNotContains(resp, str(self.visit_b.pk))
+        self.assertNotContains(resp, self.visit_type_b.name)
 
-    def test_expense_create_cross_site_visit_is_forbidden(self):
-        """expense_create POST con visit de otro site retorna 403 sin crear el gasto."""
+    def test_expense_create_cross_site_patient_is_forbidden(self):
+        """expense_create POST con patient de otro site retorna 403 sin crear el gasto."""
         from django.core.files.uploadedfile import SimpleUploadedFile
         fake_image = SimpleUploadedFile(
             'ticket.jpg', b'\xff\xd8\xff\xe0' + b'\x00' * 20, content_type='image/jpeg'
         )
-        count_before = Expense.objects.filter(visit=self.visit_b).count()
+        count_before = Expense.objects.filter(visit__patient=self.patient_b).count()
         url = reverse('expenses:create')
         resp = self.client.post(url, {
             'protocol': self.protocol_b.pk,
-            'visit': self.visit_b.pk,
+            'patient': self.patient_b.pk,
+            'visit_type_id': self.visit_type_b.pk,
             'category': 'transport',
             'expense_date': '2025-03-15',
             'description': 'Intento cruzado',
             'ticket_file': fake_image,
         })
         self.assertEqual(resp.status_code, 403)
-        self.assertEqual(Expense.objects.filter(visit=self.visit_b).count(), count_before)
+        self.assertEqual(Expense.objects.filter(visit__patient=self.patient_b).count(), count_before)
 
     def test_report_site_pdf_cross_site_is_blocked(self):
         """site_pdf retorna 404 para protocolo de otro site."""
@@ -608,3 +609,118 @@ class MultisiteIsolationTest(TestCase):
         resp = self.client.get(url, {'protocol': self.protocol_b.pk})
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, self.period_b.name)
+
+
+class VisitLockingTest(BaseExpenseTestCase):
+    """
+    Verifica que una visita quede bloqueada cuando tiene un comprobante activo,
+    y se desbloquee si ese comprobante es rechazado.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.assistant)
+
+    def _post_expense(self, visit_type=None, patient=None):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        fake_image = SimpleUploadedFile(
+            'ticket.jpg', b'\xff\xd8\xff\xe0' + b'\x00' * 20, content_type='image/jpeg'
+        )
+        vt = visit_type or self.visit_type
+        pat = patient or self.patient
+        url = reverse('expenses:create')
+        return self.client.post(url, {
+            'protocol': pat.protocol.pk,
+            'patient': pat.pk,
+            'visit_type_id': vt.pk,
+            'category': 'transport',
+            'expense_date': '2025-03-15',
+            'description': 'Taxi al hospital',
+            'ticket_file': fake_image,
+        })
+
+    def test_htmx_visits_returns_visit_types_for_patient(self):
+        """htmx_visits_for_patient devuelve tipos de visita del protocolo."""
+        url = reverse('expenses:htmx_visits')
+        resp = self.client.get(url, {'patient': self.patient.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.visit_type.name)
+
+    def test_htmx_protocol_info_returns_summary(self):
+        """htmx_protocol_info devuelve sponsor, fase y tipos de visita."""
+        url = reverse('expenses:htmx_protocol_info')
+        resp = self.client.get(url, {'protocol': self.protocol.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.visit_type.name)
+
+    def test_second_expense_on_same_visit_is_blocked(self):
+        """
+        Cargar un segundo comprobante para la misma visita del mismo paciente
+        debe retornar 200 con error (no redirige ni crea gasto).
+        """
+        # Primer gasto — debe redirigir a review
+        resp1 = self._post_expense()
+        self.assertEqual(resp1.status_code, 302)
+        self.assertEqual(Expense.objects.filter(visit__patient=self.patient, visit__visit_type=self.visit_type).count(), 1)
+
+        # Segundo intento — debe rechazarse con mensaje de error
+        resp2 = self._post_expense()
+        self.assertEqual(resp2.status_code, 200)
+        self.assertContains(resp2, 'ya tiene un comprobante cargado')
+        self.assertEqual(Expense.objects.filter(visit__patient=self.patient, visit__visit_type=self.visit_type).count(), 1)
+
+    def test_visit_unlocks_after_rejection(self):
+        """
+        Si el comprobante activo es rechazado, la visita vuelve a estar disponible
+        y se puede cargar un nuevo comprobante.
+        """
+        # Primer gasto
+        resp1 = self._post_expense()
+        self.assertEqual(resp1.status_code, 302)
+        expense = Expense.objects.filter(visit__patient=self.patient, visit__visit_type=self.visit_type).first()
+
+        # Rechazar el gasto
+        expense.status = 'rejected'
+        expense.save(update_fields=['status'])
+
+        # Segundo intento — ahora debe poder crearse
+        resp2 = self._post_expense()
+        self.assertEqual(resp2.status_code, 302)
+        self.assertEqual(Expense.objects.filter(visit__patient=self.patient, visit__visit_type=self.visit_type).count(), 2)
+
+    def test_htmx_visits_shows_locked_for_active_expense(self):
+        """
+        Cuando la visita tiene un comprobante activo, el endpoint marca esa visita
+        como bloqueada en el HTML (contiene 'ya tiene comprobante').
+        """
+        # Crear el gasto para bloquear la visita
+        Expense.objects.create(
+            visit=self.visit,
+            category='transport',
+            amount=500,
+            expense_date=date(2025, 3, 15),
+            status='pending_review',
+            submitted_by=self.assistant,
+        )
+        url = reverse('expenses:htmx_visits')
+        resp = self.client.get(url, {'patient': self.patient.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'ya tiene comprobante')
+
+    def test_htmx_visits_unlocked_after_rejection(self):
+        """
+        Si todos los comprobantes de una visita son rechazados, la visita
+        no aparece como bloqueada en el endpoint HTMX.
+        """
+        Expense.objects.create(
+            visit=self.visit,
+            category='transport',
+            amount=500,
+            expense_date=date(2025, 3, 15),
+            status='rejected',
+            submitted_by=self.assistant,
+        )
+        url = reverse('expenses:htmx_visits')
+        resp = self.client.get(url, {'patient': self.patient.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'ya tiene comprobante')

@@ -7,7 +7,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from apps.protocols.models import Protocol
+from apps.protocols.models import Protocol, VisitType
 from apps.patients.models import Patient, Visit
 
 from .models import Expense, ExpensePeriod, TicketFile, AuditLog
@@ -105,8 +105,9 @@ def expense_list(request):
 @login_required
 def expense_create(request):
     """
-    Wizard de carga: protocolo → paciente (HTMX) → visita (HTMX) + foto.
-    POST: crea el Expense con status ocr_pending y lanza OCR.
+    Wizard de carga: protocolo → paciente (HTMX) → tipo de visita (HTMX) + foto.
+    POST: resuelve/crea la instancia Visit, valida que no esté bloqueada,
+          crea el Expense con status ocr_pending y lanza OCR.
     """
     user = request.user
     protocols = Protocol.objects.filter(is_active=True).order_by('code')
@@ -114,13 +115,14 @@ def expense_create(request):
         protocols = protocols.filter(site_id=user.site_id)
 
     if request.method == 'POST':
+        raw_patient_id = request.POST.get('patient', '').strip()
+
+        # IDOR: paciente debe pertenecer al site del usuario
         if not user.is_superuser and not user.is_site_admin and user.site_id:
-            raw_visit_id = request.POST.get('visit', '').strip()
-            if raw_visit_id and raw_visit_id.isdigit():
+            if raw_patient_id and raw_patient_id.isdigit():
                 cross_site = (
-                    Visit.objects.select_related('patient__protocol')
-                    .filter(pk=raw_visit_id)
-                    .exclude(patient__protocol__site_id=user.site_id)
+                    Patient.objects.filter(pk=raw_patient_id)
+                    .exclude(protocol__site_id=user.site_id)
                     .exists()
                 )
                 if cross_site:
@@ -130,8 +132,38 @@ def expense_create(request):
 
         form = ExpenseCreateForm(request.POST, request.FILES)
         if form.is_valid():
-            visit_id = form.cleaned_data['visit']
-            visit = get_object_or_404(Visit, pk=visit_id)
+            visit_type_id = form.cleaned_data['visit_type_id']
+
+            # Obtener paciente
+            if not raw_patient_id or not raw_patient_id.isdigit():
+                form.add_error(None, 'Seleccioná un paciente.')
+                return render(request, 'expenses/create.html', {'form': form, 'protocols': protocols})
+            patient = get_object_or_404(Patient, pk=raw_patient_id)
+
+            # Obtener tipo de visita y verificar que pertenece al protocolo del paciente
+            visit_type = get_object_or_404(
+                VisitType, pk=visit_type_id, protocol=patient.protocol
+            )
+
+            # Buscar o crear la instancia de visita
+            visit, created = Visit.objects.get_or_create(
+                patient=patient,
+                visit_type=visit_type,
+                defaults={
+                    'scheduled_date': timezone.now().date(),
+                    'status': 'scheduled',
+                    'created_by': request.user,
+                },
+            )
+
+            # Verificar que la visita no esté bloqueada por un comprobante activo
+            if visit.expenses.exclude(status='rejected').exists():
+                form.add_error(
+                    None,
+                    f'La visita "{visit_type.name}" de {patient.patient_code} ya tiene '
+                    'un comprobante cargado. Solo podés agregar uno nuevo si el anterior es rechazado.'
+                )
+                return render(request, 'expenses/create.html', {'form': form, 'protocols': protocols})
 
             expense = Expense.objects.create(
                 visit=visit,
@@ -160,7 +192,13 @@ def expense_create(request):
                 content_type='Expense',
                 object_id=expense.pk,
                 object_repr=str(expense),
-                details={'visit_id': visit.pk, 'category': expense.category, 'ticket_file_id': ticket.pk},
+                details={
+                    'visit_id': visit.pk,
+                    'visit_type': visit_type.name,
+                    'patient_code': patient.patient_code,
+                    'category': expense.category,
+                    'ticket_file_id': ticket.pk,
+                },
                 ip_address=_get_client_ip(request),
             )
 
@@ -627,8 +665,12 @@ def htmx_patients_for_protocol(request):
 @login_required
 @require_GET
 def htmx_visits_for_patient(request):
+    """
+    Retorna los tipos de visita del protocolo del paciente, anotados con
+    su estado de bloqueo (is_locked=True si ya tiene un comprobante activo).
+    """
     patient_id = request.GET.get('patient') or request.GET.get('patient_id')
-    visits = []
+    visit_type_rows = []
     if patient_id:
         user = request.user
         if not user.is_superuser and not user.is_site_admin and user.site_id:
@@ -636,8 +678,50 @@ def htmx_visits_for_patient(request):
                 pk=patient_id, protocol__site_id=user.site_id
             ).first()
             if not patient:
-                return render(request, 'expenses/partials/visit_options.html', {'visits': []})
-        visits = Visit.objects.filter(
-            patient_id=patient_id
-        ).select_related('visit_type').order_by('scheduled_date')
-    return render(request, 'expenses/partials/visit_options.html', {'visits': visits})
+                return render(request, 'expenses/partials/visit_options.html', {'visit_type_rows': []})
+        else:
+            patient = Patient.objects.select_related('protocol').filter(pk=patient_id).first()
+            if not patient:
+                return render(request, 'expenses/partials/visit_options.html', {'visit_type_rows': []})
+
+        visit_types = VisitType.objects.filter(
+            protocol=patient.protocol
+        ).order_by('order')
+
+        existing_visits = {
+            v.visit_type_id: v
+            for v in Visit.objects.filter(patient=patient).prefetch_related('expenses')
+        }
+
+        for vt in visit_types:
+            visit = existing_visits.get(vt.pk)
+            is_locked = bool(
+                visit and visit.expenses.exclude(status='rejected').exists()
+            )
+            visit_type_rows.append({'visit_type': vt, 'is_locked': is_locked})
+
+    return render(request, 'expenses/partials/visit_options.html',
+                  {'visit_type_rows': visit_type_rows})
+
+
+@login_required
+@require_GET
+def htmx_protocol_info(request):
+    """Retorna un panel con el resumen del protocolo (sponsor, fase, tipos de visita)."""
+    protocol_id = request.GET.get('protocol') or request.GET.get('protocol_id')
+    if not protocol_id:
+        return render(request, 'expenses/partials/protocol_info.html', {'protocol': None})
+
+    user = request.user
+    qs = Protocol.objects.filter(pk=protocol_id, is_active=True)
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        qs = qs.filter(site_id=user.site_id)
+    protocol = qs.first()
+    if not protocol:
+        return render(request, 'expenses/partials/protocol_info.html', {'protocol': None})
+
+    visit_types = VisitType.objects.filter(protocol=protocol).order_by('order')
+    return render(request, 'expenses/partials/protocol_info.html', {
+        'protocol': protocol,
+        'visit_types': visit_types,
+    })

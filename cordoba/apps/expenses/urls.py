@@ -20,4 +20,5 @@ urlpatterns = [
     # HTMX chained selects
     path('htmx/patients/', views.htmx_patients_for_protocol, name='htmx_patients'),
     path('htmx/visits/', views.htmx_visits_for_patient, name='htmx_visits'),
+    path('htmx/protocol-info/', views.htmx_protocol_info, name='htmx_protocol_info'),
 ]
