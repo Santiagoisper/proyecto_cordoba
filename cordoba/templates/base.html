@@ -28,10 +28,11 @@
   </script>
 
   <!-- HTMX -->
-  <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDa7A6fQDNXAXgMNsphY" crossorigin="anonymous"></script>
+  {% load static %}
+  <script src="{% static 'js/htmx.min.js' %}"></script>
 
   <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="{% static 'js/lucide.min.js' %}"></script>
 
   {% block extra_head %}{% endblock %}
 </head>
