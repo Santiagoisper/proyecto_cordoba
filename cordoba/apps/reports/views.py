@@ -203,7 +203,7 @@ def htmx_periods_for_patient(request):
     """Períodos disponibles para un paciente (filtra por protocolo del paciente)."""
     if not _can_report(request.user):
         return HttpResponseForbidden()
-    patient_id = request.GET.get('patient')
+    patient_id = request.GET.get('patient_id')
     periods = []
     if patient_id:
         try:
