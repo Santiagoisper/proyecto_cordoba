@@ -2,7 +2,7 @@ import logging
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import render, get_object_or_404
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.protocols.models import Protocol
 from apps.patients.models import Patient
@@ -19,21 +19,38 @@ def _can_report(user):
     )
 
 
+def _protocols_ctx():
+    return Protocol.objects.filter(is_active=True).order_by('code')
+
+
 @login_required
 def reports_index(request):
     """Selector de reportes: protocolo, paciente y período."""
     if not _can_report(request.user):
         return HttpResponseForbidden("No tenés permiso para generar reportes.")
 
-    protocols = Protocol.objects.filter(is_active=True).order_by('code')
-    return render(request, 'reports/index.html', {'protocols': protocols})
+    return render(request, 'reports/index.html', {'protocols': _protocols_ctx()})
 
 
 @login_required
-def patient_pdf(request, patient_id, period_id):
-    """Genera y descarga el PDF de rendición de un paciente en un período."""
+@require_POST
+def patient_pdf(request):
+    """
+    POST — Genera y descarga el PDF de rendición de un paciente en un período.
+    Recibe patient_id y period_id en el cuerpo del formulario (CSRF protegido).
+    La mutación de estado (approved/settled → exported) solo ocurre vía POST.
+    """
     if not _can_report(request.user):
         return HttpResponseForbidden("No tenés permiso para generar reportes.")
+
+    patient_id = request.POST.get('patient_id')
+    period_id = request.POST.get('period_id')
+
+    if not patient_id or not period_id:
+        return render(request, 'reports/index.html', {
+            'protocols': _protocols_ctx(),
+            'error': 'Seleccioná un paciente y un período antes de generar el reporte.',
+        })
 
     patient = get_object_or_404(Patient, pk=patient_id)
     period = get_object_or_404(ExpensePeriod, pk=period_id, protocol=patient.protocol)
@@ -43,13 +60,13 @@ def patient_pdf(request, patient_id, period_id):
         pdf_bytes = generate_patient_pdf(patient, period, request.user)
     except ValueError as e:
         return render(request, 'reports/index.html', {
-            'protocols': Protocol.objects.filter(is_active=True).order_by('code'),
+            'protocols': _protocols_ctx(),
             'error': str(e),
         })
     except Exception as e:
         logger.exception("Error generando PDF de paciente %s: %s", patient_id, e)
         return render(request, 'reports/index.html', {
-            'protocols': Protocol.objects.filter(is_active=True).order_by('code'),
+            'protocols': _protocols_ctx(),
             'error': f'Error al generar el PDF: {e}',
         })
 
@@ -60,10 +77,23 @@ def patient_pdf(request, patient_id, period_id):
 
 
 @login_required
-def site_pdf(request, protocol_id, period_id):
-    """Genera y descarga el PDF consolidado del protocolo en un período."""
+@require_POST
+def site_pdf(request):
+    """
+    POST — Genera y descarga el PDF consolidado del protocolo en un período.
+    Recibe protocol_id y period_id en el cuerpo del formulario (CSRF protegido).
+    """
     if not _can_report(request.user):
         return HttpResponseForbidden("No tenés permiso para generar reportes.")
+
+    protocol_id = request.POST.get('protocol_id')
+    period_id = request.POST.get('period_id')
+
+    if not protocol_id or not period_id:
+        return render(request, 'reports/index.html', {
+            'protocols': _protocols_ctx(),
+            'error': 'Seleccioná un protocolo y un período antes de generar el reporte.',
+        })
 
     protocol = get_object_or_404(Protocol, pk=protocol_id)
     period = get_object_or_404(ExpensePeriod, pk=period_id, protocol=protocol)
@@ -73,13 +103,13 @@ def site_pdf(request, protocol_id, period_id):
         pdf_bytes = generate_site_pdf(protocol, period, request.user)
     except ValueError as e:
         return render(request, 'reports/index.html', {
-            'protocols': Protocol.objects.filter(is_active=True).order_by('code'),
+            'protocols': _protocols_ctx(),
             'error': str(e),
         })
     except Exception as e:
         logger.exception("Error generando PDF consolidado %s: %s", protocol_id, e)
         return render(request, 'reports/index.html', {
-            'protocols': Protocol.objects.filter(is_active=True).order_by('code'),
+            'protocols': _protocols_ctx(),
             'error': f'Error al generar el PDF: {e}',
         })
 
@@ -90,10 +120,23 @@ def site_pdf(request, protocol_id, period_id):
 
 
 @login_required
-def site_excel(request, protocol_id, period_id):
-    """Genera y descarga el Excel consolidado del protocolo en un período."""
+@require_POST
+def site_excel(request):
+    """
+    POST — Genera y descarga el Excel consolidado del protocolo en un período.
+    Recibe protocol_id y period_id en el cuerpo del formulario (CSRF protegido).
+    """
     if not _can_report(request.user):
         return HttpResponseForbidden("No tenés permiso para generar reportes.")
+
+    protocol_id = request.POST.get('protocol_id')
+    period_id = request.POST.get('period_id')
+
+    if not protocol_id or not period_id:
+        return render(request, 'reports/index.html', {
+            'protocols': _protocols_ctx(),
+            'error': 'Seleccioná un protocolo y un período antes de generar el reporte.',
+        })
 
     protocol = get_object_or_404(Protocol, pk=protocol_id)
     period = get_object_or_404(ExpensePeriod, pk=period_id, protocol=protocol)
@@ -103,13 +146,13 @@ def site_excel(request, protocol_id, period_id):
         xlsx_bytes = generate_site_excel(protocol, period, request.user)
     except ValueError as e:
         return render(request, 'reports/index.html', {
-            'protocols': Protocol.objects.filter(is_active=True).order_by('code'),
+            'protocols': _protocols_ctx(),
             'error': str(e),
         })
     except Exception as e:
         logger.exception("Error generando Excel %s: %s", protocol_id, e)
         return render(request, 'reports/index.html', {
-            'protocols': Protocol.objects.filter(is_active=True).order_by('code'),
+            'protocols': _protocols_ctx(),
             'error': f'Error al generar el Excel: {e}',
         })
 
