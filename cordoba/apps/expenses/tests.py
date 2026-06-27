@@ -724,3 +724,82 @@ class VisitLockingTest(BaseExpenseTestCase):
         resp = self.client.get(url, {'patient': self.patient.pk})
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, 'ya tiene comprobante')
+
+
+# ─── Tests de visit_actual_date end-to-end ────────────────────────────────────
+
+class VisitActualDateTest(BaseExpenseTestCase):
+    """
+    Verifica que el campo visit_actual_date del formulario de carga se persiste
+    correctamente en Visit.actual_date y se actualiza cuando la visita ya existe.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.visit_type_date = VisitType.objects.create(
+            protocol=cls.protocol,
+            name='Visita Fecha Test',
+            code='VFT',
+            window_before_days=3,
+            window_after_days=3,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.assistant)
+
+    def _post_create(self, visit_actual_date=None):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        fake_image = SimpleUploadedFile(
+            'ticket.jpg', b'\xff\xd8\xff\xe0' + b'\x00' * 20, content_type='image/jpeg'
+        )
+        data = {
+            'protocol': self.patient.protocol.pk,
+            'patient': self.patient.pk,
+            'visit_type_id': self.visit_type_date.pk,
+            'category': 'transport',
+            'expense_date': '2025-03-15',
+            'description': 'Taxi al hospital',
+            'ticket_file': fake_image,
+        }
+        if visit_actual_date:
+            data['visit_actual_date'] = visit_actual_date
+        return self.client.post(reverse('expenses:create'), data)
+
+    def test_visit_actual_date_saved_when_provided(self):
+        """
+        Al enviar visit_actual_date en el formulario, ese valor se persiste
+        como Visit.actual_date en la base de datos.
+        """
+        resp = self._post_create(visit_actual_date='2025-03-20')
+        self.assertEqual(resp.status_code, 302)
+        visit = Visit.objects.get(patient=self.patient, visit_type=self.visit_type_date)
+        self.assertEqual(visit.actual_date, date(2025, 3, 20))
+
+    def test_visit_created_valid_without_actual_date(self):
+        """
+        Al omitir visit_actual_date, la visita se crea correctamente y
+        actual_date queda en None.
+        """
+        resp = self._post_create()
+        self.assertEqual(resp.status_code, 302)
+        visit = Visit.objects.get(patient=self.patient, visit_type=self.visit_type_date)
+        self.assertIsNone(visit.actual_date)
+
+    def test_existing_visit_actual_date_updated(self):
+        """
+        Si la visita ya existe (get_or_create devuelve created=False),
+        visit_actual_date actualiza Visit.actual_date correctamente.
+        """
+        Visit.objects.create(
+            patient=self.patient,
+            visit_type=self.visit_type_date,
+            scheduled_date=date(2025, 3, 15),
+            actual_date=None,
+            created_by=self.coordinator,
+        )
+        resp = self._post_create(visit_actual_date='2025-04-01')
+        self.assertEqual(resp.status_code, 302)
+        visit = Visit.objects.get(patient=self.patient, visit_type=self.visit_type_date)
+        self.assertEqual(visit.actual_date, date(2025, 4, 1))
