@@ -10,6 +10,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+
 environ.Env.read_env(BASE_DIR / '.env', overwrite=True)
 
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-dev-key-change-in-production-xyz123')
