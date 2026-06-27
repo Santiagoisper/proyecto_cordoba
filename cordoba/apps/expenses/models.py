@@ -64,6 +64,7 @@ class Expense(models.Model):
         ('approved', 'Aprobado'),
         ('rejected', 'Rechazado'),
         ('observed', 'Observado'),
+        ('exported', 'Exportado'),
     ]
 
     visit = models.ForeignKey(
@@ -194,6 +195,7 @@ class AuditLog(models.Model):
         ('rejected', 'Rechazado'),
         ('observed', 'Observado'),
         ('corrected', 'Corregido'),
+        ('exported', 'Exportado'),
         ('ocr_completed', 'OCR completado'),
         ('ocr_failed', 'OCR fallido'),
         ('period_closed', 'Período cerrado'),

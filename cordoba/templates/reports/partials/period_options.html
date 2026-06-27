@@ -1,0 +1,9 @@
+<option value="">— Seleccioná un período —</option>
+{% for period in periods %}
+<option value="{{ period.pk }}">
+  {{ period.name }} ({{ period.date_from|date:"d/m/Y" }} – {{ period.date_to|date:"d/m/Y" }})
+  {% if period.status != 'open' %}[{{ period.get_status_display }}]{% endif %}
+</option>
+{% empty %}
+<option value="" disabled>Sin períodos disponibles</option>
+{% endfor %}

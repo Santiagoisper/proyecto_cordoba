@@ -104,11 +104,8 @@
         {% if user.is_coordinator or user.is_site_admin or user.is_superuser %}
         <div class="pt-2">
           <p class="px-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Coordinación</p>
-          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
+          <a href="{% url 'dashboard:index' %}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
             <i data-lucide="check-circle" class="h-4 w-4 shrink-0"></i>Aprobar gastos
-          </a>
-          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
-            <i data-lucide="calendar-range" class="h-4 w-4 shrink-0"></i>Períodos
           </a>
         </div>
         {% endif %}
@@ -128,11 +125,8 @@
         {% if user.is_coordinator or user.is_site_admin or user.is_auditor or user.is_superuser %}
         <div class="pt-2">
           <p class="px-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Reportes</p>
-          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
-            <i data-lucide="file-text" class="h-4 w-4 shrink-0"></i>PDF paciente
-          </a>
-          <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
-            <i data-lucide="file-bar-chart" class="h-4 w-4 shrink-0"></i>PDF consolidado
+          <a href="{% url 'reports:index' %}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
+            <i data-lucide="file-text" class="h-4 w-4 shrink-0"></i>PDF / Excel
           </a>
         </div>
         {% endif %}

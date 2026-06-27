@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 2cm 1.5cm 2.5cm 1.5cm;
+      @bottom-center {
+        content: "Página " counter(page) " de " counter(pages);
+        font-size: 9pt;
+        color: #6B7280;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #1E293B; margin: 0; }
+
+    /* Header */
+    .header { border-bottom: 2px solid #1E3A8A; padding-bottom: 10pt; margin-bottom: 14pt; }
+    .header-title { font-size: 16pt; font-weight: bold; color: #1E3A8A; margin: 0 0 4pt 0; }
+    .header-subtitle { font-size: 9pt; color: #6B7280; margin: 0; }
+    .header-row { display: table; width: 100%; }
+    .header-left { display: table-cell; vertical-align: bottom; }
+    .header-right { display: table-cell; text-align: right; vertical-align: bottom; font-size: 8pt; color: #6B7280; }
+
+    /* Confidentiality notice */
+    .confidential { background: #FFF7ED; border: 1px solid #FDBA74; border-radius: 4pt; padding: 6pt 10pt; margin-bottom: 14pt; font-size: 8pt; color: #9A3412; }
+
+    /* Metadata table */
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14pt; font-size: 9pt; }
+    .meta-table td { padding: 4pt 8pt; border: 1px solid #E2E8F0; }
+    .meta-table td:first-child { font-weight: bold; background: #F8FAFC; width: 35%; color: #475569; }
+
+    /* Section title */
+    .section-title { font-size: 11pt; font-weight: bold; color: #1E3A8A; border-bottom: 1px solid #BFDBFE; padding-bottom: 4pt; margin: 14pt 0 8pt 0; }
+
+    /* Expenses table */
+    .expense-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+    .expense-table th { background: #1E3A8A; color: white; padding: 5pt 6pt; text-align: left; font-weight: bold; font-size: 8pt; }
+    .expense-table td { padding: 5pt 6pt; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
+    .expense-table tr:nth-child(even) td { background: #F8FAFC; }
+    .expense-table .amount { text-align: right; font-weight: bold; font-family: monospace; }
+    .ticket-thumb { max-width: 50pt; max-height: 50pt; border: 1px solid #CBD5E1; }
+
+    /* Totals table */
+    .totals-table { width: 50%; margin-left: auto; border-collapse: collapse; margin-top: 10pt; font-size: 9pt; }
+    .totals-table td { padding: 4pt 8pt; border: 1px solid #E2E8F0; }
+    .totals-table td:last-child { text-align: right; font-family: monospace; font-weight: bold; }
+    .totals-table .grand-total td { background: #1E3A8A; color: white; font-weight: bold; }
+
+    /* Footer */
+    .footer { margin-top: 20pt; border-top: 1px solid #E2E8F0; padding-top: 8pt; font-size: 8pt; color: #94A3B8; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-row">
+      <div class="header-left">
+        <p class="header-title">Rendición de Viáticos</p>
+        <p class="header-subtitle">Proyecto Córdoba — CINME / Innova Trials</p>
+      </div>
+      <div class="header-right">
+        Generado: {{ generated_at|date:"d/m/Y H:i" }} UTC<br>
+        Por: {{ generated_by.get_full_name|default:generated_by.username }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Aviso de confidencialidad -->
+  <div class="confidential">
+    <strong>DOCUMENTO CONFIDENCIAL GCP/ANMAT</strong> — Este documento contiene información de un ensayo clínico.
+    Distribución restringida. Solo código de paciente — nunca nombre real.
+  </div>
+
+  <!-- Metadatos -->
+  <table class="meta-table">
+    <tr><td>Protocolo</td><td>{{ protocol.code }} — {{ protocol.name }}</td></tr>
+    <tr><td>Sponsor</td><td>{{ protocol.sponsor|default:"—" }}</td></tr>
+    <tr><td>Fase</td><td>{{ protocol.phase|default:"—" }}</td></tr>
+    <tr><td>Código de paciente</td><td><strong>{{ patient.patient_code }}</strong></td></tr>
+    <tr><td>Período</td><td>{{ period.name }} ({{ period.date_from|date:"d/m/Y" }} — {{ period.date_to|date:"d/m/Y" }})</td></tr>
+  </table>
+
+  <!-- Gastos -->
+  <div class="section-title">Detalle de gastos aprobados</div>
+
+  <table class="expense-table">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Visita</th>
+        <th>Categoría</th>
+        <th>Proveedor</th>
+        <th>CUIT</th>
+        <th>N° Comp.</th>
+        <th style="text-align:right;">Monto</th>
+        <th>Ticket</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in expenses %}
+      {% with exp=row.expense %}
+      <tr>
+        <td>{{ exp.expense_date|date:"d/m/Y" }}</td>
+        <td>{{ exp.visit.visit_type.name }}</td>
+        <td>{{ exp.get_category_display }}</td>
+        <td>{{ exp.vendor|default:"—" }}</td>
+        <td>{{ exp.ocr_extracted.cuit|default:"—" }}</td>
+        <td>{{ exp.ocr_extracted.receipt_number|default:"—" }}</td>
+        <td class="amount">${{ exp.amount|floatformat:2 }} {{ exp.currency }}</td>
+        <td>
+          {% if row.ticket_b64 %}
+            <img src="{{ row.ticket_b64 }}" class="ticket-thumb" alt="Ticket" />
+          {% elif row.ticket_filename %}
+            <span style="font-size:7pt;color:#94A3B8;">PDF adjunto</span>
+          {% else %}
+            <span style="font-size:7pt;color:#94A3B8;">Sin imagen</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Totales -->
+  <div class="section-title">Resumen por categoría</div>
+
+  <table class="totals-table">
+    {% for cat_key, cat_data in totals.by_category.items %}
+    <tr>
+      <td>{{ cat_data.label }}</td>
+      <td>${{ cat_data.amount|floatformat:2 }}</td>
+    </tr>
+    {% endfor %}
+    <tr class="grand-total">
+      <td>TOTAL GENERAL</td>
+      <td>${{ totals.total|floatformat:2 }}</td>
+    </tr>
+  </table>
+
+  <!-- Footer -->
+  <div class="footer">
+    Proyecto Córdoba v1.0 — Documento generado automáticamente el {{ generated_at|date:"d/m/Y \a \l\a\s H:i" }} UTC
+    por {{ generated_by.get_full_name|default:generated_by.username }}.
+    Este reporte incluye únicamente gastos con estado "Aprobado" o "Exportado".
+    Generación registrada en el sistema de auditoría.
+  </div>
+
+</body>
+</html>

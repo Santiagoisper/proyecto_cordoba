@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-slate-900">Generación de reportes</h1>
+    <p class="text-slate-500 text-sm mt-1">PDF por paciente, PDF consolidado del site y exportación Excel.</p>
+  </div>
+
+  {% if error %}
+  <div class="mb-6 flex items-start gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800">
+    <i data-lucide="alert-circle" class="h-4 w-4 shrink-0 mt-0.5"></i>
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <div class="space-y-6">
+
+    <!-- ── PDF por paciente ──────────────────────────────────────────────── -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+        <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100">
+          <i data-lucide="file-text" class="h-4 w-4 text-blue-600"></i>
+        </div>
+        <div>
+          <h2 class="font-semibold text-slate-800">PDF por paciente</h2>
+          <p class="text-xs text-slate-500">Todos los gastos aprobados de un paciente en el período</p>
+        </div>
+      </div>
+      <div class="px-6 py-5">
+        <form method="get" action="." id="patient-pdf-form" class="space-y-4">
+
+          <!-- Protocolo -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Protocolo</label>
+            <select name="prot_patient" id="prot-patient-select"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500"
+              hx-get="{% url 'reports:htmx_patients' %}"
+              hx-target="#patient-select"
+              hx-trigger="change"
+              hx-include="[name='prot_patient']">
+              <option value="">— Seleccioná un protocolo —</option>
+              {% for protocol in protocols %}
+              <option value="{{ protocol.pk }}">{{ protocol.code }} — {{ protocol.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Paciente (cargado por HTMX) -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Paciente</label>
+            <select name="patient_id" id="patient-select"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500"
+              hx-get="{% url 'reports:htmx_patient_periods' %}"
+              hx-target="#patient-period-select"
+              hx-trigger="change"
+              hx-include="[name='patient_id']">
+              <option value="">— Primero seleccioná el protocolo —</option>
+            </select>
+          </div>
+
+          <!-- Período (cargado por HTMX) -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Período</label>
+            <select name="patient_period_id" id="patient-period-select"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500">
+              <option value="">— Primero seleccioná el paciente —</option>
+            </select>
+          </div>
+
+          <button type="submit" name="action" value="patient_pdf"
+            class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
+            <i data-lucide="download" class="h-4 w-4"></i>
+            Descargar PDF
+          </button>
+
+        </form>
+      </div>
+    </div>
+
+    <!-- ── PDF consolidado + Excel ──────────────────────────────────────── -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+        <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-green-100">
+          <i data-lucide="file-bar-chart" class="h-4 w-4 text-green-600"></i>
+        </div>
+        <div>
+          <h2 class="font-semibold text-slate-800">PDF consolidado del site / Excel</h2>
+          <p class="text-xs text-slate-500">Todos los pacientes del protocolo en el período — resumen ejecutivo + detalle</p>
+        </div>
+      </div>
+      <div class="px-6 py-5">
+        <div class="space-y-4">
+
+          <!-- Protocolo -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Protocolo</label>
+            <select name="protocol" id="site-protocol-select"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500"
+              hx-get="{% url 'reports:htmx_periods' %}"
+              hx-target="#site-period-select"
+              hx-trigger="change"
+              hx-include="[name='protocol']">
+              <option value="">— Seleccioná un protocolo —</option>
+              {% for protocol in protocols %}
+              <option value="{{ protocol.pk }}">{{ protocol.code }} — {{ protocol.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Período (cargado por HTMX) -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Período</label>
+            <select id="site-period-select" name="period_id"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500">
+              <option value="">— Primero seleccioná el protocolo —</option>
+            </select>
+          </div>
+
+          <!-- Botones de descarga -->
+          <div class="flex gap-3 flex-wrap">
+            <button type="button" onclick="downloadReport('pdf')"
+              class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition-colors">
+              <i data-lucide="file-text" class="h-4 w-4"></i>
+              Descargar PDF consolidado
+            </button>
+            <button type="button" onclick="downloadReport('excel')"
+              class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors">
+              <i data-lucide="table" class="h-4 w-4"></i>
+              Descargar Excel (.xlsx)
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Nota de confidencialidad -->
+    <div class="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+      <i data-lucide="shield" class="h-4 w-4 shrink-0 mt-0.5 text-amber-600"></i>
+      <div>
+        <span class="font-medium">Confidencialidad GCP/ANMAT:</span>
+        Los reportes contienen solo código de paciente, nunca nombre real.
+        Toda generación queda registrada en el AuditLog del sistema.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function downloadReport(type) {
+  const protocolId = document.getElementById('site-protocol-select').value;
+  const periodId = document.getElementById('site-period-select').value;
+
+  if (!protocolId || !periodId) {
+    alert('Por favor seleccioná protocolo y período antes de descargar.');
+    return;
+  }
+
+  if (type === 'pdf') {
+    window.location.href = `/reports/protocol/${protocolId}/period/${periodId}/pdf/`;
+  } else {
+    window.location.href = `/reports/protocol/${protocolId}/period/${periodId}/excel/`;
+  }
+}
+
+// Formulario de PDF por paciente — usar URLs correctas
+document.getElementById('patient-pdf-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const patientId = document.getElementById('patient-select').value;
+  const periodId = document.getElementById('patient-period-select').value;
+  if (!patientId || !periodId) {
+    alert('Por favor seleccioná protocolo, paciente y período.');
+    return;
+  }
+  window.location.href = `/reports/patient/${patientId}/period/${periodId}/pdf/`;
+});
+</script>
+{% endblock %}

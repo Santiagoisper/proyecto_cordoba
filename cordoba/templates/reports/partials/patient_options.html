@@ -1,0 +1,6 @@
+<option value="">— Seleccioná un paciente —</option>
+{% for patient in patients %}
+<option value="{{ patient.pk }}">{{ patient.patient_code }}{% if patient.initials %} ({{ patient.initials }}){% endif %}</option>
+{% empty %}
+<option value="" disabled>Sin pacientes en este protocolo</option>
+{% endfor %}
