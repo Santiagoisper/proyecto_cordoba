@@ -6,10 +6,12 @@
     @page {
       size: A4 portrait;
       margin: 2cm 1.5cm 2.5cm 1.5cm;
-      @bottom-center {
-        content: "Página " counter(page) " de " counter(pages);
-        font-size: 9pt;
-        color: #6B7280;
+      @frame footer_frame {
+        -pdf-frame-border: 0;
+        bottom: 0.4cm;
+        left: 0cm;
+        right: 0cm;
+        height: 0.8cm;
       }
     }
 
@@ -179,11 +181,12 @@
 
   {% endfor %}
 
-  <!-- Footer -->
-  <div class="footer">
-    Proyecto Córdoba v1.0 — Reporte consolidado generado el {{ generated_at|date:"d/m/Y \a \l\a\s H:i" }} UTC
-    por {{ generated_by.get_full_name|default:generated_by.username }}.
-    Incluye solo gastos con estado "Aprobado" o "Exportado". Generación registrada en AuditLog.
+  <!-- Footer con número de página (xhtml2pdf: -pdf-frame-content) -->
+  <div style="-pdf-frame-content: footer_frame; text-align: center; font-size: 8pt; color: #94A3B8;">
+    Proyecto Córdoba v1.0 — Confidencial GCP/ANMAT —
+    Gastos con estado Aprobado, Liquidado o Exportado —
+    Generado {{ generated_at|date:"d/m/Y H:i" }} UTC por {{ generated_by.get_full_name|default:generated_by.username }} —
+    Página <pdf:pagenumber/> de <pdf:pagecount/>
   </div>
 
 </body>
