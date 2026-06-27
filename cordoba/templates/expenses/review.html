@@ -196,6 +196,17 @@
           <dd class="text-slate-800">{{ expense.visit.visit_type.name }}</dd>
           <dt class="text-slate-500">Fecha programada</dt>
           <dd class="text-slate-800">{{ expense.visit.scheduled_date|date:"d/m/Y" }}</dd>
+          {% if expense.visit.actual_date %}
+          <dt class="text-slate-500">Fecha real de visita</dt>
+          <dd class="flex items-center gap-1.5">
+            <span class="text-slate-800">{{ expense.visit.actual_date|date:"d/m/Y" }}</span>
+            {% if expense.visit.actual_date != expense.visit.scheduled_date %}
+            <span class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-700 font-medium">
+              <i data-lucide="alert-triangle" class="h-3 w-3"></i>Difiere de la programada
+            </span>
+            {% endif %}
+          </dd>
+          {% endif %}
         </dl>
       </div>
 

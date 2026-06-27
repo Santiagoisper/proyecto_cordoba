@@ -160,6 +160,34 @@
 
   </div>
 
+  <!-- Datos de la visita -->
+  <div class="mb-6 bg-slate-50 rounded-xl border border-slate-200 px-5 py-4">
+    <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+      <i data-lucide="calendar" class="h-3.5 w-3.5"></i> Datos de la visita
+    </h2>
+    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-4 text-sm">
+      <dt class="text-slate-500">Protocolo</dt>
+      <dd class="text-slate-800 font-medium">{{ expense.visit.patient.protocol.code }}</dd>
+      <dt class="text-slate-500">Paciente</dt>
+      <dd class="text-slate-800 font-mono font-medium">{{ expense.visit.patient.patient_code }}</dd>
+      <dt class="text-slate-500">Tipo de visita</dt>
+      <dd class="text-slate-800">{{ expense.visit.visit_type.name }}</dd>
+      <dt class="text-slate-500">Fecha programada</dt>
+      <dd class="text-slate-800">{{ expense.visit.scheduled_date|date:"d/m/Y" }}</dd>
+      {% if expense.visit.actual_date %}
+      <dt class="text-slate-500">Fecha real de visita</dt>
+      <dd class="flex items-center gap-1.5 flex-wrap">
+        <span class="text-slate-800">{{ expense.visit.actual_date|date:"d/m/Y" }}</span>
+        {% if expense.visit.actual_date != expense.visit.scheduled_date %}
+        <span class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-700 font-medium">
+          <i data-lucide="alert-triangle" class="h-3 w-3"></i>Difiere de la programada
+        </span>
+        {% endif %}
+      </dd>
+      {% endif %}
+    </dl>
+  </div>
+
   <!-- Botón corrección (asistente, gasto observado, período abierto) -->
   {% if expense.status == 'observed' and request.user == expense.submitted_by %}
   {% if not expense.period or expense.period.status == 'open' %}
