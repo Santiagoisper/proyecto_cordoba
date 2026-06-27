@@ -95,6 +95,151 @@
     {% endif %}
   </div>
 
+  <!-- Panel de seguimiento de visitas por protocolo -->
+  {% if visits_by_protocol %}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm mb-8">
+    <div class="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <i data-lucide="calendar-check" class="h-4 w-4 text-slate-500"></i>
+        <h2 class="font-semibold text-slate-800">Seguimiento de visitas — estado de comprobante</h2>
+      </div>
+
+      <!-- Filtros -->
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="filter-protocol"
+                class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-300">
+          <option value="">Todos los protocolos</option>
+          {% for pg in visits_by_protocol %}
+          <option value="{{ pg.protocol.code }}">{{ pg.protocol.code }} — {{ pg.protocol.name|truncatechars:40 }}</option>
+          {% endfor %}
+        </select>
+
+        <div class="flex rounded-lg border border-slate-200 overflow-hidden text-sm">
+          <button data-filter-status="" onclick="setStatusFilter(this)"
+                  class="visit-status-btn active px-3 py-1.5 bg-slate-100 text-slate-700 font-medium border-r border-slate-200">
+            Todos
+          </button>
+          <button data-filter-status="sin_comprobante" onclick="setStatusFilter(this)"
+                  class="visit-status-btn px-3 py-1.5 bg-white text-slate-600 hover:bg-slate-50 border-r border-slate-200">
+            Sin comprobante
+          </button>
+          <button data-filter-status="rechazado" onclick="setStatusFilter(this)"
+                  class="visit-status-btn px-3 py-1.5 bg-white text-slate-600 hover:bg-slate-50 border-r border-slate-200">
+            Rechazado
+          </button>
+          <button data-filter-status="cargado" onclick="setStatusFilter(this)"
+                  class="visit-status-btn px-3 py-1.5 bg-white text-slate-600 hover:bg-slate-50">
+            Cargado
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="visits-panel">
+      {% for pg in visits_by_protocol %}
+      <div class="visit-protocol-group border-b border-slate-100 last:border-b-0"
+           data-protocol="{{ pg.protocol.code }}">
+
+        <!-- Encabezado del protocolo -->
+        <div class="px-6 py-3 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-slate-800 text-sm">{{ pg.protocol.code }}</span>
+            <span class="text-slate-500 text-sm">{{ pg.protocol.name }}</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            {% if pg.sin_comprobante_count %}
+            <span class="inline-flex items-center gap-1 bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+              <i data-lucide="alert-circle" class="h-3 w-3"></i>
+              {{ pg.sin_comprobante_count }} sin comprobante
+            </span>
+            {% endif %}
+            {% if pg.rechazado_count %}
+            <span class="inline-flex items-center gap-1 bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
+              <i data-lucide="x-circle" class="h-3 w-3"></i>
+              {{ pg.rechazado_count }} rechazado{{ pg.rechazado_count|pluralize:"s" }}
+            </span>
+            {% endif %}
+            {% if pg.cargado_count %}
+            <span class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+              <i data-lucide="check-circle" class="h-3 w-3"></i>
+              {{ pg.cargado_count }} con comprobante
+            </span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Tabla de visitas -->
+        <table class="w-full text-sm">
+          <thead class="bg-white border-b border-slate-100">
+            <tr class="text-xs font-medium text-slate-400 uppercase tracking-wide">
+              <th class="px-6 py-2 text-left">Paciente</th>
+              <th class="px-4 py-2 text-left">Tipo de visita</th>
+              <th class="px-4 py-2 text-left">Fecha programada</th>
+              <th class="px-4 py-2 text-left">Estado visita</th>
+              <th class="px-4 py-2 text-left">Comprobante</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-50">
+            {% for v in pg.visits %}
+            <tr class="visit-row hover:bg-slate-50 transition-colors"
+                data-protocol="{{ pg.protocol.code }}"
+                data-status="{{ v.comprobante_status }}">
+              <td class="px-6 py-3 font-medium text-slate-800">
+                {{ v.patient.patient_code }}
+                {% if v.patient.initials %}
+                <span class="text-slate-400 font-normal">({{ v.patient.initials }})</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-slate-600">{{ v.visit_type.name }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ v.scheduled_date|date:"d/m/Y" }}</td>
+              <td class="px-4 py-3">
+                {% if v.status == 'completed' %}
+                <span class="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+                  <i data-lucide="check" class="h-3 w-3"></i> Realizada
+                </span>
+                {% elif v.status == 'scheduled' %}
+                <span class="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                  <i data-lucide="clock" class="h-3 w-3"></i> Programada
+                </span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3">
+                {% if v.comprobante_status == 'sin_comprobante' %}
+                <span class="inline-flex items-center gap-1 text-xs font-semibold bg-red-100 text-red-700 px-2.5 py-1 rounded-full">
+                  <i data-lucide="file-x" class="h-3 w-3"></i> Sin comprobante
+                </span>
+                {% elif v.comprobante_status == 'rechazado' %}
+                <span class="inline-flex items-center gap-1 text-xs font-semibold bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full">
+                  <i data-lucide="x-circle" class="h-3 w-3"></i> Rechazado
+                </span>
+                {% elif v.comprobante_status == 'cargado' %}
+                <span class="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full">
+                  <i data-lucide="file-check" class="h-3 w-3"></i> Cargado
+                </span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Mensaje vacío cuando todos los rows del grupo están ocultos por filtro -->
+        <div class="visit-group-empty hidden px-6 py-4 text-center text-sm text-slate-400">
+          No hay visitas que coincidan con el filtro seleccionado.
+        </div>
+
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Mensaje global vacío -->
+    <div id="visits-panel-empty" class="hidden px-6 py-12 text-center">
+      <i data-lucide="search-x" class="h-8 w-8 text-slate-300 mx-auto mb-2"></i>
+      <p class="text-slate-500 text-sm">No hay visitas que coincidan con los filtros seleccionados.</p>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Gastos observados (cola de corrección asistente) -->
   {% if observed_expenses %}
   <div class="bg-white rounded-xl border border-blue-200 shadow-sm">
@@ -139,9 +284,72 @@
   function closeModal() {
     document.getElementById('modal-container').innerHTML = '';
   }
-  // Close modal on Escape key
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeModal();
   });
+
+  // --- Visit tracking filters ---
+  let activeProtocol = '';
+  let activeStatus = '';
+
+  document.getElementById('filter-protocol')?.addEventListener('change', function() {
+    activeProtocol = this.value;
+    applyVisitFilters();
+  });
+
+  function setStatusFilter(btn) {
+    activeStatus = btn.dataset.filterStatus;
+    document.querySelectorAll('.visit-status-btn').forEach(b => {
+      b.classList.remove('active', 'bg-slate-100', 'text-slate-700', 'font-medium');
+      b.classList.add('bg-white', 'text-slate-600');
+    });
+    btn.classList.add('active', 'bg-slate-100', 'text-slate-700', 'font-medium');
+    btn.classList.remove('bg-white', 'text-slate-600');
+    applyVisitFilters();
+  }
+
+  function applyVisitFilters() {
+    const groups = document.querySelectorAll('.visit-protocol-group');
+    let anyGroupVisible = false;
+
+    groups.forEach(group => {
+      const groupProtocol = group.dataset.protocol;
+      const protocolMatch = !activeProtocol || groupProtocol === activeProtocol;
+
+      if (!protocolMatch) {
+        group.classList.add('hidden');
+        return;
+      }
+
+      const rows = group.querySelectorAll('.visit-row');
+      let visibleRows = 0;
+      rows.forEach(row => {
+        const statusMatch = !activeStatus || row.dataset.status === activeStatus;
+        if (statusMatch) {
+          row.classList.remove('hidden');
+          visibleRows++;
+        } else {
+          row.classList.add('hidden');
+        }
+      });
+
+      const emptyMsg = group.querySelector('.visit-group-empty');
+      if (visibleRows === 0) {
+        group.classList.remove('hidden');
+        emptyMsg?.classList.remove('hidden');
+      } else {
+        group.classList.remove('hidden');
+        emptyMsg?.classList.add('hidden');
+        anyGroupVisible = true;
+      }
+
+      if (protocolMatch && visibleRows > 0) anyGroupVisible = true;
+    });
+
+    const globalEmpty = document.getElementById('visits-panel-empty');
+    if (globalEmpty) {
+      globalEmpty.classList.toggle('hidden', anyGroupVisible || !activeProtocol && !activeStatus);
+    }
+  }
 </script>
 {% endblock %}

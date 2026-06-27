@@ -49,6 +49,9 @@ def _admin_context(user):
 def _coordinator_context(user):
     from apps.expenses.models import Expense
     from apps.expenses.services import ExpenseValidationService
+    from apps.patients.models import Visit
+    from django.db.models import Count, Q
+    from itertools import groupby
 
     today = timezone.now().date()
 
@@ -77,6 +80,51 @@ def _coordinator_context(user):
             'ticket': expense.ticket_files.first(),
         })
 
+    # Seguimiento de visitas: estado de comprobante por visita
+    ACTIVE_EXPENSE_STATUSES = [
+        'ocr_pending', 'pending_review', 'approved', 'observed', 'settled', 'exported'
+    ]
+    visits_qs = (
+        Visit.objects.filter(
+            status__in=['scheduled', 'completed'],
+            patient__protocol__is_active=True,
+        )
+        .select_related('patient__protocol', 'visit_type')
+        .annotate(
+            total_expenses=Count('expenses'),
+            active_expenses=Count(
+                'expenses',
+                filter=Q(expenses__status__in=ACTIVE_EXPENSE_STATUSES),
+            ),
+        )
+        .order_by('patient__protocol__code', 'patient__patient_code', 'scheduled_date')
+    )
+
+    # Site-scope: coordinators only see visits from their own site (same rule as expenses)
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        visits_qs = visits_qs.filter(patient__protocol__site_id=user.site_id)
+
+    visit_rows = []
+    for v in visits_qs:
+        if v.total_expenses == 0:
+            v.comprobante_status = 'sin_comprobante'
+        elif v.active_expenses == 0:
+            v.comprobante_status = 'rechazado'
+        else:
+            v.comprobante_status = 'cargado'
+        visit_rows.append(v)
+
+    visits_by_protocol = []
+    for protocol, group in groupby(visit_rows, key=lambda v: v.patient.protocol):
+        group_list = list(group)
+        visits_by_protocol.append({
+            'protocol': protocol,
+            'visits': group_list,
+            'sin_comprobante_count': sum(1 for v in group_list if v.comprobante_status == 'sin_comprobante'),
+            'rechazado_count': sum(1 for v in group_list if v.comprobante_status == 'rechazado'),
+            'cargado_count': sum(1 for v in group_list if v.comprobante_status == 'cargado'),
+        })
+
     return {
         'pending_count': pending_qs.count(),
         'observed_count': observed_qs.count(),
@@ -88,6 +136,7 @@ def _coordinator_context(user):
         ).count(),
         'pending_with_alerts': pending_with_alerts,
         'observed_expenses': list(observed_qs[:10]),
+        'visits_by_protocol': visits_by_protocol,
     }
 
 
