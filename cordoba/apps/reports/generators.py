@@ -16,7 +16,7 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-REPORT_STATUSES = ('approved', 'exported')
+REPORT_STATUSES = ('approved', 'settled', 'exported')
 CATEGORY_LABELS = {
     'transport': 'Transporte',
     'meals': 'Comidas',

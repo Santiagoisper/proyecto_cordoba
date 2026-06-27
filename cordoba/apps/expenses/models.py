@@ -64,6 +64,7 @@ class Expense(models.Model):
         ('approved', 'Aprobado'),
         ('rejected', 'Rechazado'),
         ('observed', 'Observado'),
+        ('settled', 'Liquidado'),
         ('exported', 'Exportado'),
     ]
 

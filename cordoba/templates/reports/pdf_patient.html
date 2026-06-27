@@ -93,10 +93,12 @@
         <th>Fecha</th>
         <th>Visita</th>
         <th>Categoría</th>
+        <th>Tipo comp.</th>
         <th>Proveedor</th>
         <th>CUIT</th>
         <th>N° Comp.</th>
         <th style="text-align:right;">Monto</th>
+        <th style="text-align:right;">IVA</th>
         <th>Ticket</th>
       </tr>
     </thead>
@@ -107,10 +109,16 @@
         <td>{{ exp.expense_date|date:"d/m/Y" }}</td>
         <td>{{ exp.visit.visit_type.name }}</td>
         <td>{{ exp.get_category_display }}</td>
+        <td>{{ exp.ocr_extracted.receipt_type|default:"—" }}</td>
         <td>{{ exp.vendor|default:"—" }}</td>
         <td>{{ exp.ocr_extracted.cuit|default:"—" }}</td>
         <td>{{ exp.ocr_extracted.receipt_number|default:"—" }}</td>
         <td class="amount">${{ exp.amount|floatformat:2 }} {{ exp.currency }}</td>
+        <td class="amount">
+          {% if exp.ocr_extracted.iva %}
+            ${{ exp.ocr_extracted.iva|floatformat:2 }}
+          {% else %}—{% endif %}
+        </td>
         <td>
           {% if row.ticket_b64 %}
             <img src="{{ row.ticket_b64 }}" class="ticket-thumb" alt="Ticket" />

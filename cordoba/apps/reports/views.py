@@ -128,6 +128,8 @@ def site_excel(request, protocol_id, period_id):
 @require_GET
 def htmx_periods_for_protocol(request):
     """Períodos de rendición de un protocolo (para selector de consolidado)."""
+    if not _can_report(request.user):
+        return HttpResponseForbidden()
     protocol_id = request.GET.get('protocol')
     periods = []
     if protocol_id:
@@ -141,6 +143,8 @@ def htmx_periods_for_protocol(request):
 @require_GET
 def htmx_patients_for_protocol(request):
     """Pacientes activos de un protocolo (para selector de PDF por paciente)."""
+    if not _can_report(request.user):
+        return HttpResponseForbidden()
     protocol_id = request.GET.get('protocol')
     patients = []
     if protocol_id:
@@ -154,6 +158,8 @@ def htmx_patients_for_protocol(request):
 @require_GET
 def htmx_periods_for_patient(request):
     """Períodos disponibles para un paciente (filtra por protocolo del paciente)."""
+    if not _can_report(request.user):
+        return HttpResponseForbidden()
     patient_id = request.GET.get('patient')
     periods = []
     if patient_id:
