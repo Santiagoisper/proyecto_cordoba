@@ -181,25 +181,36 @@ def expense_review(request, pk):
         }
         form = ExpenseReviewForm(instance=expense, initial=initial)
 
-    def badge_class(field):
+    def _badge(field):
         confidence = ocr_confidence.get(field, 0.0)
         if confidence >= 0.7:
-            return 'bg-green-100 text-green-700 border-green-200'
+            return {
+                'css': 'bg-green-100 text-green-700 border-green-200',
+                'label': f'Confianza alta ({confidence:.0%})',
+            }
         elif confidence >= 0.4:
-            return 'bg-amber-100 text-amber-700 border-amber-200'
-        else:
-            return 'bg-red-100 text-red-600 border-red-200'
-
-    def badge_label(field):
-        confidence = ocr_confidence.get(field, 0.0)
-        if confidence >= 0.7:
-            return f'Confianza alta ({confidence:.0%})'
-        elif confidence >= 0.4:
-            return f'Confianza media ({confidence:.0%})'
+            return {
+                'css': 'bg-amber-100 text-amber-700 border-amber-200',
+                'label': f'Confianza media ({confidence:.0%})',
+            }
         elif confidence > 0:
-            return f'Confianza baja ({confidence:.0%})'
+            return {
+                'css': 'bg-red-100 text-red-600 border-red-200',
+                'label': f'Confianza baja ({confidence:.0%})',
+            }
         else:
-            return 'Sin dato OCR — completar manualmente'
+            return {
+                'css': 'bg-slate-100 text-slate-500 border-slate-200',
+                'label': 'Sin dato OCR — completar manualmente',
+            }
+
+    badges = {
+        'amount': _badge('amount'),
+        'date': _badge('date'),
+        'vendor': _badge('vendor'),
+        'cuit': _badge('cuit'),
+        'receipt': _badge('receipt'),
+    }
 
     is_mock = expense.ocr_raw_data.get('mock', False) if expense.ocr_raw_data else True
 
@@ -210,12 +221,9 @@ def expense_review(request, pk):
         'ocr_extracted': ocr_extracted,
         'ocr_confidence': ocr_confidence,
         'is_mock': is_mock,
-        'badge_class': badge_class,
-        'badge_label': badge_label,
+        'badges': badges,
         'cuit': ocr_extracted.get('cuit', ''),
         'receipt_number': ocr_extracted.get('receipt_number', ''),
-        'conf_cuit': ocr_confidence.get('cuit', 0.0),
-        'conf_receipt': ocr_confidence.get('receipt', 0.0),
     })
 
 
@@ -228,7 +236,7 @@ def htmx_patients_for_protocol(request):
     Devuelve HTML con opciones de <select> para pacientes de un protocolo.
     Usado por HTMX en el formulario de carga.
     """
-    protocol_id = request.GET.get('protocol_id')
+    protocol_id = request.GET.get('protocol') or request.GET.get('protocol_id')
     patients = []
     if protocol_id:
         patients = Patient.objects.filter(
@@ -248,7 +256,7 @@ def htmx_visits_for_patient(request):
     Devuelve HTML con opciones de <select> para visitas de un paciente.
     Usado por HTMX en el formulario de carga.
     """
-    patient_id = request.GET.get('patient_id')
+    patient_id = request.GET.get('patient') or request.GET.get('patient_id')
     visits = []
     if patient_id:
         visits = Visit.objects.filter(
