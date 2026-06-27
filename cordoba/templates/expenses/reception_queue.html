@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Bandeja de recepción{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <div class="flex items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Bandeja de recepción</h1>
+      <p class="text-slate-500 text-sm mt-1">Tickets recibidos que todavía no fueron imputados a paciente y visita.</p>
+    </div>
+    <a href="{% url 'expenses:reception_upload' %}"
+       class="inline-flex items-center gap-2 bg-primary-700 hover:bg-primary-800 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors shadow-sm">
+      <i data-lucide="scan-line" class="h-4 w-4"></i>
+      Recibir ticket
+    </a>
+  </div>
+
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    {% if tickets %}
+    <div class="divide-y divide-slate-100">
+      {% for ticket in tickets %}
+      <div class="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-slate-900">Ticket #{{ ticket.pk }}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+              {{ ticket.get_status_display }}
+            </span>
+          </div>
+          <p class="text-sm text-slate-500 mt-1">{{ ticket.original_filename|default:"Archivo sin nombre" }}</p>
+          <p class="text-xs text-slate-400 mt-0.5">
+            Subido por {{ ticket.uploaded_by.get_full_name|default:ticket.uploaded_by.username }}
+            · {{ ticket.uploaded_at|date:"d/m/Y H:i" }}
+          </p>
+          {% if ticket.notes %}
+          <p class="text-xs text-slate-600 mt-2 bg-slate-50 rounded px-2 py-1">{{ ticket.notes }}</p>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <a href="{{ ticket.file.url }}" target="_blank"
+             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium">
+            <i data-lucide="eye" class="h-4 w-4"></i>Ver
+          </a>
+          <a href="{% url 'expenses:reception_assign' ticket.pk %}"
+             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-700 hover:bg-primary-800 text-white text-sm font-medium">
+            <i data-lucide="git-pull-request-arrow" class="h-4 w-4"></i>Imputar
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-6 py-14 text-center">
+      <i data-lucide="inbox" class="h-12 w-12 text-slate-200 mx-auto mb-4"></i>
+      <p class="text-slate-500 font-medium">No hay tickets pendientes</p>
+      <p class="text-slate-400 text-sm mt-1 mb-6">Los tickets subidos en recepción aparecerán acá.</p>
+      <a href="{% url 'expenses:reception_upload' %}"
+         class="inline-flex items-center gap-2 bg-primary-700 hover:bg-primary-800 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors">
+        <i data-lucide="scan-line" class="h-4 w-4"></i>
+        Recibir ticket
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

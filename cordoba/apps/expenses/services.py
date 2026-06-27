@@ -12,7 +12,7 @@ import hashlib
 import logging
 import requests
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from dataclasses import dataclass, field
 from typing import Optional, List
 
@@ -170,6 +170,7 @@ class ExpenseValidationService:
         alerts: List[ValidationAlert] = []
         alerts.extend(self._check_date_window(expense))
         alerts.extend(self._check_amount_cap(expense))
+        alerts.extend(self._check_budget_usd(expense))
         alerts.extend(self._check_duplicate(expense))
         return alerts
 
@@ -247,6 +248,77 @@ class ExpenseValidationService:
         except Exception:
             pass
         return []
+
+    def _check_budget_usd(self, expense) -> List[ValidationAlert]:
+        """Compara el gasto convertido a USD contra el budget del protocolo."""
+        try:
+            from .models import ProtocolBudgetItem
+            budget = (
+                ProtocolBudgetItem.objects
+                .filter(
+                    protocol=expense.visit.patient.protocol,
+                    category=expense.category,
+                )
+                .filter(visit_type=expense.visit.visit_type)
+                .first()
+            )
+            if not budget:
+                budget = (
+                    ProtocolBudgetItem.objects
+                    .filter(
+                        protocol=expense.visit.patient.protocol,
+                        category=expense.category,
+                        visit_type__isnull=True,
+                    )
+                    .first()
+                )
+            if not budget:
+                return []
+
+            amount_usd = expense.amount_usd
+            if amount_usd is None:
+                amount_usd = calculate_amount_usd(
+                    expense.amount, expense.currency, expense.exchange_rate_to_usd
+                )
+            if amount_usd is None:
+                return [ValidationAlert(
+                    level='warning',
+                    code='missing_exchange_rate',
+                    message=(
+                        f'Hay budget en USD para {expense.get_category_display()}, '
+                        'pero falta el tipo de cambio para comparar el ticket.'
+                    ),
+                )]
+            if amount_usd > budget.amount_usd:
+                return [ValidationAlert(
+                    level='error',
+                    code='budget_exceeded_usd',
+                    message=(
+                        f'Gasto fuera de budget: USD {amount_usd:.2f} > '
+                        f'USD {budget.amount_usd:.2f} ({expense.get_category_display()})'
+                    ),
+                )]
+        except Exception:
+            pass
+        return []
+
+
+def calculate_amount_usd(amount, currency: str, exchange_rate_to_usd=None):
+    """Convierte el monto del ticket a USD si hay datos suficientes."""
+    if amount is None:
+        return None
+    try:
+        value = Decimal(str(amount))
+        if currency == 'USD':
+            return value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        if not exchange_rate_to_usd:
+            return None
+        rate = Decimal(str(exchange_rate_to_usd))
+        if rate <= 0:
+            return None
+        return (value / rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ZeroDivisionError, TypeError, ValueError):
+        return None
 
 
 # ─── Cierre de período ────────────────────────────────────────────────────────

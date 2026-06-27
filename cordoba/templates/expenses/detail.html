@@ -98,6 +98,18 @@
           <dt class="text-slate-500 w-32 shrink-0">Monto</dt>
           <dd class="font-bold text-slate-900">${{ expense.amount|ars }} {{ expense.currency }}</dd>
         </div>
+        {% if expense.amount_usd %}
+        <div class="flex px-5 py-2.5 gap-4">
+          <dt class="text-slate-500 w-32 shrink-0">Monto USD</dt>
+          <dd class="font-bold text-slate-900">USD {{ expense.amount_usd }}</dd>
+        </div>
+        {% endif %}
+        {% if expense.exchange_rate_to_usd %}
+        <div class="flex px-5 py-2.5 gap-4">
+          <dt class="text-slate-500 w-32 shrink-0">Tipo cambio</dt>
+          <dd class="text-slate-900">{{ expense.exchange_rate_to_usd }} {{ expense.currency }}/USD</dd>
+        </div>
+        {% endif %}
         <div class="flex px-5 py-2.5 gap-4">
           <dt class="text-slate-500 w-32 shrink-0">Fecha ticket</dt>
           <dd class="text-slate-900">{{ expense.expense_date|date:"d/m/Y" }}</dd>

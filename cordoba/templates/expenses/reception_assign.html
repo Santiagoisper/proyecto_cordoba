@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Imputar ticket{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-6">
+  <div class="lg:col-span-2">
+    <a href="{% url 'expenses:reception_queue' %}" class="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-sm mb-4">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>Bandeja
+    </a>
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-slate-100">
+        <h2 class="font-semibold text-slate-800 text-sm">Ticket #{{ reception_ticket.pk }}</h2>
+      </div>
+      <div class="p-4">
+        {% if reception_ticket.mime_type == 'application/pdf' %}
+        <a href="{{ reception_ticket.file.url }}" target="_blank"
+           class="flex flex-col items-center justify-center gap-2 h-64 rounded-xl border-2 border-dashed border-red-200 bg-red-50 hover:bg-red-100 transition-colors">
+          <i data-lucide="file-text" class="h-12 w-12 text-red-400"></i>
+          <span class="text-sm text-red-600 font-medium">Ver PDF adjunto</span>
+        </a>
+        {% else %}
+        <a href="{{ reception_ticket.file.url }}" target="_blank">
+          <img src="{{ reception_ticket.file.url }}" alt="Ticket" class="w-full rounded-xl border border-slate-200 object-contain max-h-96">
+        </a>
+        {% endif %}
+        <p class="text-xs text-slate-400 mt-2 text-center">{{ reception_ticket.original_filename|truncatechars:50 }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="lg:col-span-3">
+    <h1 class="text-2xl font-bold text-slate-900 mb-1">Imputar comprobante</h1>
+    <p class="text-slate-500 text-sm mb-6">Asigná protocolo, paciente, visita y categoría. Luego el OCR extrae monto y datos del ticket.</p>
+
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <label class="block text-sm font-medium text-slate-700 mb-1.5">Protocolo</label>
+        <select id="id_protocol" name="protocol"
+                class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm"
+                hx-get="{% url 'expenses:htmx_patients' %}"
+                hx-target="#patient-select-container"
+                hx-trigger="change"
+                hx-include="[name='protocol']"
+                required>
+          <option value="">— Seleccioná un protocolo —</option>
+          {% for protocol in protocols %}
+          <option value="{{ protocol.pk }}">{{ protocol.code }} — {{ protocol.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <label class="block text-sm font-medium text-slate-700 mb-1.5">Paciente</label>
+        <div id="patient-select-container">
+          <select id="id_patient" name="patient" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-400 text-sm" disabled>
+            <option value="">— Primero elegí el protocolo —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <label class="block text-sm font-medium text-slate-700 mb-1.5">Visita</label>
+        <div id="visit-select-container">
+          <select id="id_visit_type_id" name="visit_type_id" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-400 text-sm" disabled>
+            <option value="">— Primero elegí el paciente —</option>
+          </select>
+        </div>
+        <div class="mt-4">
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Fecha real de la visita</label>
+          {{ form.visit_actual_date }}
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Categoría</label>
+          {{ form.category }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Fecha del gasto</label>
+          {{ form.expense_date }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Descripción</label>
+          {{ form.description }}
+        </div>
+      </div>
+
+      <button type="submit"
+              class="w-full bg-primary-700 hover:bg-primary-800 text-white font-semibold py-3 px-6 rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2">
+        <i data-lucide="check" class="h-4 w-4"></i>
+        Imputar y procesar OCR
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

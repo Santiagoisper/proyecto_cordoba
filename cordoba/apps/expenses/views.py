@@ -10,10 +10,20 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.protocols.models import Protocol, VisitType
 from apps.patients.models import Patient, Visit
 
-from .models import Expense, ExpensePeriod, TicketFile, AuditLog
-from .forms import ExpenseCreateForm, ExpenseReviewForm, ObservedCorrectionForm
+from .models import Expense, ExpensePeriod, TicketFile, AuditLog, ReceptionTicket
+from .forms import (
+    ExpenseCreateForm,
+    ExpenseReviewForm,
+    ObservedCorrectionForm,
+    ReceptionTicketUploadForm,
+    ReceptionTicketAssignForm,
+)
 from .tasks import process_ocr_for_ticket
-from .services import ExpenseValidationService, close_period as close_period_service
+from .services import (
+    ExpenseValidationService,
+    calculate_amount_usd,
+    close_period as close_period_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +38,11 @@ def _get_client_ip(request):
 def _can_coordinate(user):
     """True si el usuario puede aprobar/rechazar/observar gastos."""
     return user.is_superuser or user.is_site_admin or user.is_coordinator
+
+
+def _can_work_reception(user):
+    """True si el usuario puede subir o imputar tickets de recepción."""
+    return user.is_superuser or user.is_site_admin or user.is_coordinator or user.is_assistant
 
 
 def _period_locked_response(expense):
@@ -51,28 +66,258 @@ def _period_locked_response(expense):
 
 def _site_scope_expenses(user, qs):
     """
-    Restringe el QuerySet de Expense al site del usuario cuando:
-    - el usuario NO es superuser ni site_admin, Y
-    - el usuario tiene site_id seteado.
-    Protección IDOR: coordinadores solo ven gastos de su propio site.
+    Restringe el QuerySet de Expense al site del usuario.
+    Protección IDOR: roles operativos sin site asignado no reciben acceso global.
     """
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
+    if not user.is_superuser and not user.is_site_admin:
+        if not user.site_id:
+            return qs.none()
         qs = qs.filter(visit__patient__protocol__site_id=user.site_id)
     return qs
 
 
 def _site_scope_periods(user, qs):
     """
-    Restringe el QuerySet de ExpensePeriod al site del usuario cuando:
-    - el usuario NO es superuser ni site_admin, Y
-    - el usuario tiene site_id seteado.
+    Restringe el QuerySet de ExpensePeriod al site del usuario.
+    Roles operativos sin site asignado no reciben acceso global.
     """
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
+    if not user.is_superuser and not user.is_site_admin:
+        if not user.site_id:
+            return qs.none()
         qs = qs.filter(protocol__site_id=user.site_id)
     return qs
 
 
+def _site_scope_reception_tickets(user, qs):
+    """Restringe tickets de recepción al site del usuario."""
+    if not user.is_superuser and not user.is_site_admin:
+        if not user.site_id:
+            return qs.none()
+        qs = qs.filter(site_id=user.site_id)
+    return qs
+
+
+def _protocols_for_user(user):
+    protocols = Protocol.objects.filter(is_active=True).order_by('code')
+    if not user.is_superuser and not user.is_site_admin:
+        protocols = protocols.filter(site_id=user.site_id) if user.site_id else protocols.none()
+    return protocols
+
+
+def _create_expense_from_assignment(request, form, patient, visit_type, ticket_file=None):
+    visit_actual_date = form.cleaned_data.get('visit_actual_date')
+    visit, created = Visit.objects.get_or_create(
+        patient=patient,
+        visit_type=visit_type,
+        defaults={
+            'scheduled_date': timezone.now().date(),
+            'actual_date': visit_actual_date,
+            'status': 'scheduled',
+            'created_by': request.user,
+        },
+    )
+    if not created and visit_actual_date:
+        visit.actual_date = visit_actual_date
+        visit.save(update_fields=['actual_date'])
+
+    if visit.expenses.exclude(status='rejected').exists():
+        form.add_error(
+            None,
+            f'La visita "{visit_type.name}" de {patient.patient_code} ya tiene '
+            'un comprobante cargado. Solo podés agregar uno nuevo si el anterior es rechazado.',
+        )
+        return None, None
+
+    expense = Expense.objects.create(
+        visit=visit,
+        category=form.cleaned_data['category'],
+        amount=0,
+        expense_date=form.cleaned_data['expense_date'],
+        description=form.cleaned_data['description'],
+        status='ocr_pending',
+        submitted_by=request.user,
+    )
+
+    if ticket_file is not None:
+        ticket = TicketFile.objects.create(
+            expense=expense,
+            file=ticket_file.file,
+            original_filename=ticket_file.original_filename,
+            file_size=ticket_file.file_size,
+            mime_type=ticket_file.mime_type,
+            uploaded_by=request.user,
+            ocr_status='pending',
+        )
+    else:
+        uploaded = request.FILES['ticket_file']
+        ticket = TicketFile.objects.create(
+            expense=expense,
+            file=uploaded,
+            original_filename=uploaded.name,
+            file_size=uploaded.size,
+            mime_type=uploaded.content_type,
+            uploaded_by=request.user,
+            ocr_status='pending',
+        )
+
+    AuditLog.objects.create(
+        user=request.user,
+        action='created',
+        content_type='Expense',
+        object_id=expense.pk,
+        object_repr=str(expense),
+        details={
+            'visit_id': visit.pk,
+            'visit_type': visit_type.name,
+            'patient_code': patient.patient_code,
+            'category': expense.category,
+            'ticket_file_id': ticket.pk,
+        },
+        ip_address=_get_client_ip(request),
+    )
+    return expense, ticket
+
+
 # ─── Expense list ─────────────────────────────────────────────────────────────
+
+@login_required
+def reception_upload(request):
+    """Carga rápida de comprobante en recepción, todavía sin imputar."""
+    if not _can_work_reception(request.user):
+        return HttpResponseForbidden("No tenés permiso para subir tickets de recepción.")
+    if not request.user.is_superuser and not request.user.is_site_admin and not request.user.site_id:
+        return HttpResponseForbidden("No tenés un site asignado para subir tickets.")
+
+    if request.method == 'POST':
+        form = ReceptionTicketUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            ticket = form.save(commit=False)
+            uploaded = request.FILES['file']
+            ticket.original_filename = uploaded.name
+            ticket.file_size = uploaded.size
+            ticket.mime_type = uploaded.content_type
+            ticket.uploaded_by = request.user
+            ticket.site = None if (request.user.is_superuser or request.user.is_site_admin) else request.user.site
+            ticket.save()
+            AuditLog.objects.create(
+                user=request.user,
+                action='reception_uploaded',
+                content_type='ReceptionTicket',
+                object_id=ticket.pk,
+                object_repr=str(ticket),
+                details={'original_filename': ticket.original_filename},
+                ip_address=_get_client_ip(request),
+            )
+            messages.success(request, 'Ticket recibido. Quedó pendiente de imputación.')
+            return redirect('expenses:reception_queue')
+    else:
+        form = ReceptionTicketUploadForm()
+
+    return render(request, 'expenses/reception_upload.html', {'form': form})
+
+
+@login_required
+def reception_queue(request):
+    """Bandeja de tickets subidos por recepción pendientes de imputación."""
+    if not _can_work_reception(request.user):
+        return HttpResponseForbidden("No tenés permiso para ver tickets de recepción.")
+
+    tickets = _site_scope_reception_tickets(
+        request.user,
+        ReceptionTicket.objects.select_related('uploaded_by', 'site', 'assigned_expense')
+        .filter(status='pending_assignment'),
+    )
+    return render(request, 'expenses/reception_queue.html', {'tickets': tickets[:100]})
+
+
+@login_required
+def reception_assign(request, pk):
+    """Imputa un ticket de recepción a protocolo/paciente/visita y crea el Expense."""
+    if not _can_work_reception(request.user):
+        return HttpResponseForbidden("No tenés permiso para imputar tickets.")
+
+    reception_ticket = get_object_or_404(
+        _site_scope_reception_tickets(
+            request.user,
+            ReceptionTicket.objects.select_related('uploaded_by', 'site', 'assigned_expense'),
+        ),
+        pk=pk,
+        status='pending_assignment',
+    )
+    protocols = _protocols_for_user(request.user)
+
+    if request.method == 'POST':
+        raw_patient_id = request.POST.get('patient', '').strip()
+        if not request.user.is_superuser and not request.user.is_site_admin and not request.user.site_id:
+            return HttpResponseForbidden("No tenés un site asignado para imputar tickets.")
+
+        form = ReceptionTicketAssignForm(request.POST)
+        if form.is_valid():
+            if not raw_patient_id or not raw_patient_id.isdigit():
+                form.add_error(None, 'Seleccioná un paciente.')
+                return render(request, 'expenses/reception_assign.html', {
+                    'form': form,
+                    'protocols': protocols,
+                    'reception_ticket': reception_ticket,
+                })
+
+            patient_qs = Patient.objects.all()
+            if not request.user.is_superuser and not request.user.is_site_admin:
+                patient_qs = patient_qs.filter(protocol__site_id=request.user.site_id)
+            patient = get_object_or_404(patient_qs, pk=raw_patient_id)
+            visit_type = get_object_or_404(
+                VisitType,
+                pk=form.cleaned_data['visit_type_id'],
+                protocol=patient.protocol,
+            )
+            expense, ticket = _create_expense_from_assignment(
+                request, form, patient, visit_type, ticket_file=reception_ticket
+            )
+            if expense is None:
+                return render(request, 'expenses/reception_assign.html', {
+                    'form': form,
+                    'protocols': protocols,
+                    'reception_ticket': reception_ticket,
+                })
+
+            reception_ticket.status = 'assigned'
+            reception_ticket.assigned_expense = expense
+            reception_ticket.assigned_by = request.user
+            reception_ticket.assigned_at = timezone.now()
+            reception_ticket.save(update_fields=[
+                'status', 'assigned_expense', 'assigned_by', 'assigned_at',
+            ])
+            AuditLog.objects.create(
+                user=request.user,
+                action='reception_assigned',
+                content_type='ReceptionTicket',
+                object_id=reception_ticket.pk,
+                object_repr=str(reception_ticket),
+                details={
+                    'expense_id': expense.pk,
+                    'patient_code': patient.patient_code,
+                    'protocol': patient.protocol.code,
+                    'visit_type': visit_type.name,
+                },
+                ip_address=_get_client_ip(request),
+            )
+            try:
+                process_ocr_for_ticket.delay(ticket.pk)
+            except Exception as e:
+                logger.warning("No se pudo encolar tarea OCR: %s", e)
+                expense.status = 'pending_review'
+                expense.save(update_fields=['status'])
+            messages.success(request, 'Ticket imputado. Revisá los datos extraídos por OCR.')
+            return redirect('expenses:review', pk=expense.pk)
+    else:
+        form = ReceptionTicketAssignForm()
+
+    return render(request, 'expenses/reception_assign.html', {
+        'form': form,
+        'protocols': protocols,
+        'reception_ticket': reception_ticket,
+    })
+
 
 @login_required
 def expense_list(request):
@@ -83,15 +328,13 @@ def expense_list(request):
         qs = Expense.objects.select_related(
             'visit__patient__protocol', 'visit__visit_type', 'submitted_by'
         ).order_by('-created_at')
-        if not user.is_superuser and not user.is_site_admin and user.site_id:
-            qs = qs.filter(visit__patient__protocol__site=user.site)
+        qs = _site_scope_expenses(user, qs)
         title = 'Todos los gastos'
     else:
         qs = Expense.objects.filter(submitted_by=user).select_related(
             'visit__patient__protocol', 'visit__visit_type'
         ).order_by('-created_at')
-        if user.site_id:
-            qs = qs.filter(visit__patient__protocol__site=user.site)
+        qs = _site_scope_expenses(user, qs)
         title = 'Mis gastos'
 
     return render(request, 'expenses/list.html', {
@@ -110,15 +353,17 @@ def expense_create(request):
           crea el Expense con status ocr_pending y lanza OCR.
     """
     user = request.user
-    protocols = Protocol.objects.filter(is_active=True).order_by('code')
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        protocols = protocols.filter(site_id=user.site_id)
+    protocols = _protocols_for_user(user)
 
     if request.method == 'POST':
         raw_patient_id = request.POST.get('patient', '').strip()
 
         # IDOR: paciente debe pertenecer al site del usuario
-        if not user.is_superuser and not user.is_site_admin and user.site_id:
+        if not user.is_superuser and not user.is_site_admin:
+            if not user.site_id:
+                return HttpResponseForbidden(
+                    "No tenés un site asignado para cargar gastos."
+                )
             if raw_patient_id and raw_patient_id.isdigit():
                 cross_site = (
                     Patient.objects.filter(pk=raw_patient_id)
@@ -138,78 +383,19 @@ def expense_create(request):
             if not raw_patient_id or not raw_patient_id.isdigit():
                 form.add_error(None, 'Seleccioná un paciente.')
                 return render(request, 'expenses/create.html', {'form': form, 'protocols': protocols})
-            patient = get_object_or_404(Patient, pk=raw_patient_id)
+            patient_qs = Patient.objects.all()
+            if not user.is_superuser and not user.is_site_admin:
+                patient_qs = patient_qs.filter(protocol__site_id=user.site_id)
+            patient = get_object_or_404(patient_qs, pk=raw_patient_id)
 
             # Obtener tipo de visita y verificar que pertenece al protocolo del paciente
             visit_type = get_object_or_404(
                 VisitType, pk=visit_type_id, protocol=patient.protocol
             )
 
-            # Fecha real de la visita (campo opcional del formulario)
-            visit_actual_date = form.cleaned_data.get('visit_actual_date')
-
-            # Buscar o crear la instancia de visita
-            visit, created = Visit.objects.get_or_create(
-                patient=patient,
-                visit_type=visit_type,
-                defaults={
-                    'scheduled_date': timezone.now().date(),
-                    'actual_date': visit_actual_date,
-                    'status': 'scheduled',
-                    'created_by': request.user,
-                },
-            )
-
-            # Si la visita ya existía y se proporcionó una fecha real, actualizarla
-            if not created and visit_actual_date:
-                visit.actual_date = visit_actual_date
-                visit.save(update_fields=['actual_date'])
-
-            # Verificar que la visita no esté bloqueada por un comprobante activo
-            if visit.expenses.exclude(status='rejected').exists():
-                form.add_error(
-                    None,
-                    f'La visita "{visit_type.name}" de {patient.patient_code} ya tiene '
-                    'un comprobante cargado. Solo podés agregar uno nuevo si el anterior es rechazado.'
-                )
+            expense, ticket = _create_expense_from_assignment(request, form, patient, visit_type)
+            if expense is None:
                 return render(request, 'expenses/create.html', {'form': form, 'protocols': protocols})
-
-            expense = Expense.objects.create(
-                visit=visit,
-                category=form.cleaned_data['category'],
-                amount=0,
-                expense_date=form.cleaned_data['expense_date'],
-                description=form.cleaned_data['description'],
-                status='ocr_pending',
-                submitted_by=request.user,
-            )
-
-            uploaded = request.FILES['ticket_file']
-            ticket = TicketFile.objects.create(
-                expense=expense,
-                file=uploaded,
-                original_filename=uploaded.name,
-                file_size=uploaded.size,
-                mime_type=uploaded.content_type,
-                uploaded_by=request.user,
-                ocr_status='pending',
-            )
-
-            AuditLog.objects.create(
-                user=request.user,
-                action='created',
-                content_type='Expense',
-                object_id=expense.pk,
-                object_repr=str(expense),
-                details={
-                    'visit_id': visit.pk,
-                    'visit_type': visit_type.name,
-                    'patient_code': patient.patient_code,
-                    'category': expense.category,
-                    'ticket_file_id': ticket.pk,
-                },
-                ip_address=_get_client_ip(request),
-            )
 
             try:
                 process_ocr_for_ticket.delay(ticket.pk)
@@ -254,11 +440,20 @@ def expense_review(request, pk):
         if lock_response:
             messages.error(request, 'El período de este gasto está cerrado. No se permiten modificaciones.')
             return redirect('expenses:detail', pk=expense.pk)
+        if expense.status not in {'ocr_pending', 'pending_review'}:
+            messages.error(
+                request,
+                'Este gasto ya salió de la etapa OCR y no puede reabrirse desde esta pantalla.',
+            )
+            return redirect('expenses:detail', pk=expense.pk)
 
         form = ExpenseReviewForm(request.POST, instance=expense)
         if form.is_valid():
             updated = form.save(commit=False)
             updated.status = 'pending_review'
+            updated.amount_usd = calculate_amount_usd(
+                updated.amount, updated.currency, updated.exchange_rate_to_usd
+            )
             updated.save()
             AuditLog.objects.create(
                 user=request.user,
@@ -370,6 +565,9 @@ def expense_correct(request, pk):
             updated.reviewed_by = None
             updated.reviewed_at = None
             updated.review_notes = ''
+            updated.amount_usd = calculate_amount_usd(
+                updated.amount, updated.currency, updated.exchange_rate_to_usd
+            )
             updated.save()
             AuditLog.objects.create(
                 user=request.user,
@@ -569,12 +767,11 @@ def period_list(request):
         .order_by('-date_from')
     )
 
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        periods = periods.filter(protocol__site=user.site)
+    periods = _site_scope_periods(user, periods)
 
     protocols = Protocol.objects.filter(is_active=True).order_by('code')
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        protocols = protocols.filter(site=user.site)
+    if not user.is_superuser and not user.is_site_admin:
+        protocols = protocols.filter(site=user.site) if user.site_id else protocols.none()
 
     protocol_id = request.GET.get('protocol')
     if protocol_id:
@@ -659,7 +856,9 @@ def htmx_patients_for_protocol(request):
     patients = []
     if protocol_id:
         user = request.user
-        if not user.is_superuser and not user.is_site_admin and user.site_id:
+        if not user.is_superuser and not user.is_site_admin:
+            if not user.site_id:
+                return render(request, 'expenses/partials/patient_options.html', {'patients': []})
             protocol = Protocol.objects.filter(
                 pk=protocol_id, site_id=user.site_id
             ).first()
@@ -682,7 +881,9 @@ def htmx_visits_for_patient(request):
     visit_type_rows = []
     if patient_id:
         user = request.user
-        if not user.is_superuser and not user.is_site_admin and user.site_id:
+        if not user.is_superuser and not user.is_site_admin:
+            if not user.site_id:
+                return render(request, 'expenses/partials/visit_options.html', {'visit_type_rows': []})
             patient = Patient.objects.select_related('protocol').filter(
                 pk=patient_id, protocol__site_id=user.site_id
             ).first()
@@ -723,7 +924,9 @@ def htmx_protocol_info(request):
 
     user = request.user
     qs = Protocol.objects.filter(pk=protocol_id, is_active=True)
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
+    if not user.is_superuser and not user.is_site_admin:
+        if not user.site_id:
+            return render(request, 'expenses/partials/protocol_info.html', {'protocol': None})
         qs = qs.filter(site_id=user.site_id)
     protocol = qs.first()
     if not protocol:

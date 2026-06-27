@@ -4,6 +4,11 @@ from . import views
 app_name = 'expenses'
 
 urlpatterns = [
+    # Recepción — carga sin imputación y bandeja del asistente
+    path('reception/upload/', views.reception_upload, name='reception_upload'),
+    path('reception/', views.reception_queue, name='reception_queue'),
+    path('reception/<int:pk>/assign/', views.reception_assign, name='reception_assign'),
+
     # Asistente — carga y revisión
     path('', views.expense_list, name='list'),
     path('new/', views.expense_create, name='create'),

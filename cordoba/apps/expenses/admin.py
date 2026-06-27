@@ -1,5 +1,16 @@
 from django.contrib import admin
-from .models import Expense, ExpensePeriod, TicketFile, AuditLog
+from .models import (
+    Expense,
+    ExpensePeriod,
+    ProtocolBudgetItem,
+    TicketFile,
+    ReceptionTicket,
+    AuditLog,
+)
+
+
+def _all_model_fields(model):
+    return [field.name for field in model._meta.fields]
 
 
 class TicketFileInline(admin.TabularInline):
@@ -34,11 +45,17 @@ class ExpensePeriodAdmin(admin.ModelAdmin):
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj and obj.status != 'open':
+            readonly.extend(_all_model_fields(self.model))
+        return sorted(set(readonly))
+
 
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'visit', 'category', 'amount', 'currency',
+        'id', 'visit', 'category', 'amount', 'currency', 'amount_usd',
         'expense_date', 'status', 'submitted_by', 'created_at'
     ]
     list_filter = ['status', 'category', 'currency', 'visit__patient__protocol']
@@ -54,7 +71,11 @@ class ExpenseAdmin(admin.ModelAdmin):
     inlines = [TicketFileInline]
     fieldsets = (
         ('Gasto', {
-            'fields': ('visit', 'period', 'category', 'amount', 'currency', 'expense_date', 'vendor', 'description')
+            'fields': (
+                'visit', 'period', 'category', 'amount', 'currency',
+                'exchange_rate_to_usd', 'amount_usd',
+                'expense_date', 'vendor', 'description',
+            )
         }),
         ('Estado y revisión', {
             'fields': ('status', 'reviewed_by', 'reviewed_at', 'review_notes')
@@ -72,6 +93,28 @@ class ExpenseAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         if not change:
             obj.submitted_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj and (
+            obj.status in {'settled', 'exported'}
+            or (obj.period_id and obj.period.status != 'open')
+        ):
+            readonly.extend(_all_model_fields(self.model))
+        return sorted(set(readonly))
+
+
+@admin.register(ProtocolBudgetItem)
+class ProtocolBudgetItemAdmin(admin.ModelAdmin):
+    list_display = ['protocol', 'visit_type', 'category', 'amount_usd', 'created_by', 'created_at']
+    list_filter = ['protocol', 'category']
+    search_fields = ['protocol__code', 'protocol__name', 'visit_type__name']
+    readonly_fields = ['created_by', 'created_at']
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
 
@@ -103,6 +146,17 @@ class TicketFileAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(ReceptionTicket)
+class ReceptionTicketAdmin(admin.ModelAdmin):
+    list_display = ['id', 'status', 'site', 'original_filename', 'uploaded_by', 'uploaded_at', 'assigned_expense']
+    list_filter = ['status', 'site', 'mime_type']
+    search_fields = ['original_filename', 'notes', 'assigned_expense__visit__patient__patient_code']
+    readonly_fields = [
+        'uploaded_at', 'uploaded_by', 'file_size', 'mime_type',
+        'assigned_expense', 'assigned_by', 'assigned_at',
+    ]
 
 
 @admin.register(AuditLog)

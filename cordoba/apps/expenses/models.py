@@ -46,6 +46,53 @@ class ExpensePeriod(models.Model):
         return f"{self.protocol.code} — {self.name}"
 
 
+class ProtocolBudgetItem(models.Model):
+    """
+    Presupuesto operativo por protocolo, categoría y opcionalmente visita.
+    Se expresa en USD para poder comparar tickets cargados en ARS/USD.
+    """
+    protocol = models.ForeignKey(
+        Protocol, on_delete=models.CASCADE, related_name='budget_items'
+    )
+    visit_type = models.ForeignKey(
+        'protocols.VisitType',
+        on_delete=models.CASCADE,
+        related_name='budget_items',
+        null=True,
+        blank=True,
+        help_text="Si queda vacío aplica a todas las visitas del protocolo",
+    )
+    category = models.CharField(max_length=20, choices=[
+        ('transport', 'Transporte'),
+        ('meals', 'Comidas'),
+        ('accommodation', 'Alojamiento'),
+        ('other', 'Otro'),
+    ])
+    amount_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Monto máximo permitido en USD",
+    )
+    notes = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='budget_items_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['protocol__code', 'category', 'visit_type__order']
+        verbose_name = 'Ítem de presupuesto'
+        verbose_name_plural = 'Ítems de presupuesto'
+        unique_together = ['protocol', 'visit_type', 'category']
+
+    def __str__(self):
+        scope = self.visit_type.name if self.visit_type_id else 'Todas las visitas'
+        return f"{self.protocol.code} — {scope} — {self.get_category_display()}: USD {self.amount_usd}"
+
+
 class Expense(models.Model):
     """
     Gasto individual vinculado a una visita de un paciente.
@@ -79,6 +126,20 @@ class Expense(models.Model):
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     currency = models.CharField(max_length=3, default='ARS')
+    exchange_rate_to_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Cantidad de moneda original equivalente a 1 USD. Ej: ARS por USD.",
+    )
+    amount_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Monto convertido a USD para control contra budget.",
+    )
     expense_date = models.DateField(help_text="Fecha del gasto según el ticket")
     description = models.CharField(max_length=500, blank=True)
     vendor = models.CharField(max_length=200, blank=True, help_text="Nombre del comercio o proveedor")
@@ -184,6 +245,71 @@ class TicketFile(models.Model):
         return f"Ticket de {self.expense} — {self.uploaded_at:%Y-%m-%d %H:%M}"
 
 
+class ReceptionTicket(models.Model):
+    """
+    Comprobante subido en recepción, todavía sin imputar a protocolo/paciente/visita.
+    El asistente lo revisa y lo convierte en Expense.
+    """
+    STATUS_CHOICES = [
+        ('pending_assignment', 'Pendiente de imputación'),
+        ('assigned', 'Imputado'),
+        ('discarded', 'Descartado'),
+    ]
+
+    file = models.FileField(
+        upload_to='reception_tickets/%Y/%m/',
+        help_text="Foto o scan del ticket recibido en recepción",
+    )
+    original_filename = models.CharField(max_length=255, blank=True)
+    file_size = models.PositiveIntegerField(null=True, blank=True)
+    mime_type = models.CharField(max_length=100, blank=True)
+    notes = models.CharField(max_length=500, blank=True)
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default='pending_assignment',
+    )
+
+    site = models.ForeignKey(
+        'protocols.Site',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reception_tickets',
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='reception_tickets_uploaded',
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    assigned_expense = models.OneToOneField(
+        Expense,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reception_ticket',
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reception_tickets_assigned',
+    )
+    assigned_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        verbose_name = 'Ticket de recepción'
+        verbose_name_plural = 'Tickets de recepción'
+
+    def __str__(self):
+        return f"Ticket recepción #{self.pk} — {self.get_status_display()}"
+
+
 class AuditLog(models.Model):
     """
     Log de auditoría inmutable. GCP-compliant.
@@ -201,6 +327,8 @@ class AuditLog(models.Model):
         ('ocr_failed', 'OCR fallido'),
         ('period_closed', 'Período cerrado'),
         ('pdf_generated', 'PDF generado'),
+        ('reception_uploaded', 'Ticket subido en recepción'),
+        ('reception_assigned', 'Ticket imputado'),
         ('login', 'Inicio de sesión'),
         ('logout', 'Cierre de sesión'),
     ]

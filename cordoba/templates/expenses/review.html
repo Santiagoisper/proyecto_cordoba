@@ -130,6 +130,16 @@
               {% if form.amount.errors %}<p class="text-xs text-red-600 mt-1">{{ form.amount.errors.0 }}</p>{% endif %}
             </div>
 
+            <!-- Tipo de cambio -->
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1.5">
+                Tipo de cambio a USD
+                <span class="text-slate-400 font-normal">(si el ticket no está en USD)</span>
+              </label>
+              {{ form.exchange_rate_to_usd }}
+              {% if form.exchange_rate_to_usd.errors %}<p class="text-xs text-red-600 mt-1">{{ form.exchange_rate_to_usd.errors.0 }}</p>{% endif %}
+            </div>
+
             <!-- Fecha -->
             <div>
               <div class="flex items-center justify-between mb-1.5">

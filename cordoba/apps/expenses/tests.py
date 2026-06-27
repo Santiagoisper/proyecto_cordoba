@@ -7,14 +7,15 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.protocols.models import Protocol, Site, VisitType
 from apps.patients.models import Patient, Visit
-from .models import Expense, ExpensePeriod, AuditLog
-from .services import close_period, ExpenseValidationService
+from .models import Expense, ExpensePeriod, AuditLog, ProtocolBudgetItem, ReceptionTicket
+from .services import close_period, ExpenseValidationService, calculate_amount_usd
 
 User = get_user_model()
 
@@ -39,9 +40,16 @@ class BaseExpenseTestCase(TestCase):
         )
         cls.assistant.groups.add(Group.objects.get(name='assistant'))
 
+        cls.site = Site.objects.create(code='SITE-TEST', name='Centro Test')
+        cls.coordinator.site = cls.site
+        cls.coordinator.save(update_fields=['site'])
+        cls.assistant.site = cls.site
+        cls.assistant.save(update_fields=['site'])
+
         cls.protocol = Protocol.objects.create(
             code='PROT-TEST-01',
             name='Protocolo de prueba',
+            site=cls.site,
             max_daily_meals=Decimal('2000.00'),
             max_daily_transport=Decimal('3000.00'),
             max_daily_accommodation=Decimal('10000.00'),
@@ -313,6 +321,118 @@ class ExpenseValidationTest(BaseExpenseTestCase):
         self.assertNotIn('possible_duplicate', [a.code for a in alerts])
 
 
+class BudgetValidationTest(BaseExpenseTestCase):
+    """Validación de budget USD por protocolo/categoría/visita."""
+
+    def test_calculate_amount_usd_from_ars(self):
+        self.assertEqual(
+            calculate_amount_usd(Decimal('24000.00'), 'ARS', Decimal('1200.00')),
+            Decimal('20.00'),
+        )
+
+    def test_transport_budget_exceeded_uses_exchange_rate(self):
+        ProtocolBudgetItem.objects.create(
+            protocol=self.protocol,
+            visit_type=self.visit_type,
+            category='transport',
+            amount_usd=Decimal('20.00'),
+            created_by=self.coordinator,
+        )
+        expense = self._make_expense(
+            status='pending_review',
+            amount=Decimal('30000.00'),
+            category='transport',
+        )
+        expense.currency = 'ARS'
+        expense.exchange_rate_to_usd = Decimal('1000.00')
+        expense.amount_usd = calculate_amount_usd(
+            expense.amount, expense.currency, expense.exchange_rate_to_usd
+        )
+        expense.save(update_fields=['currency', 'exchange_rate_to_usd', 'amount_usd'])
+
+        alerts = ExpenseValidationService().validate(expense)
+        self.assertIn('budget_exceeded_usd', [a.code for a in alerts])
+
+    def test_transport_budget_within_range_has_no_budget_alert(self):
+        ProtocolBudgetItem.objects.create(
+            protocol=self.protocol,
+            visit_type=None,
+            category='transport',
+            amount_usd=Decimal('40.00'),
+            created_by=self.coordinator,
+        )
+        expense = self._make_expense(
+            status='pending_review',
+            amount=Decimal('30000.00'),
+            category='transport',
+        )
+        expense.currency = 'ARS'
+        expense.exchange_rate_to_usd = Decimal('1000.00')
+        expense.amount_usd = calculate_amount_usd(
+            expense.amount, expense.currency, expense.exchange_rate_to_usd
+        )
+        expense.save(update_fields=['currency', 'exchange_rate_to_usd', 'amount_usd'])
+
+        alerts = ExpenseValidationService().validate(expense)
+        self.assertNotIn('budget_exceeded_usd', [a.code for a in alerts])
+
+
+class ReceptionTicketFlowTest(BaseExpenseTestCase):
+    """Flujo recepción → imputación → gasto con ticket asociado."""
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.assistant)
+
+    def _fake_ticket(self, name='ticket.jpg'):
+        return SimpleUploadedFile(
+            name,
+            b'\xff\xd8\xff\xe0' + b'\x00' * 20,
+            content_type='image/jpeg',
+        )
+
+    def test_reception_upload_creates_pending_ticket(self):
+        resp = self.client.post(reverse('expenses:reception_upload'), {
+            'file': self._fake_ticket(),
+            'notes': 'Paciente lo dejó en recepción',
+        })
+
+        self.assertEqual(resp.status_code, 302)
+        ticket = ReceptionTicket.objects.get()
+        self.assertEqual(ticket.status, 'pending_assignment')
+        self.assertEqual(ticket.site, self.site)
+        self.assertEqual(ticket.uploaded_by, self.assistant)
+
+    def test_reception_assign_creates_expense_and_marks_ticket_assigned(self):
+        reception_ticket = ReceptionTicket.objects.create(
+            file=self._fake_ticket(),
+            original_filename='ticket.jpg',
+            file_size=24,
+            mime_type='image/jpeg',
+            site=self.site,
+            uploaded_by=self.assistant,
+        )
+
+        resp = self.client.post(reverse('expenses:reception_assign', kwargs={'pk': reception_ticket.pk}), {
+            'protocol': self.protocol.pk,
+            'patient': self.patient.pk,
+            'visit_type_id': self.visit_type.pk,
+            'category': 'transport',
+            'expense_date': '2025-03-15',
+            'description': 'Taxi desde recepción',
+        })
+
+        self.assertEqual(resp.status_code, 302)
+        reception_ticket.refresh_from_db()
+        self.assertEqual(reception_ticket.status, 'assigned')
+        self.assertIsNotNone(reception_ticket.assigned_expense)
+
+        expense = reception_ticket.assigned_expense
+        self.assertEqual(expense.visit.patient, self.patient)
+        self.assertEqual(expense.category, 'transport')
+        self.assertTrue(expense.ticket_files.exists())
+
+
 # ─── Tests de inmutabilidad de AuditLog ──────────────────────────────────────
 
 class AuditLogImmutabilityTest(BaseExpenseTestCase):
@@ -345,6 +465,69 @@ class AuditLogImmutabilityTest(BaseExpenseTestCase):
             object_id=expense.pk,
         )
         self.assertTrue(log.exists())
+
+
+class ExpenseReviewTransitionTest(BaseExpenseTestCase):
+    """Regresiones para evitar reaperturas fuera del flujo OCR."""
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.assistant)
+
+    def test_review_post_does_not_reopen_approved_expense(self):
+        """Un gasto aprobado no puede volver a pending_review desde /review/."""
+        expense = self._make_expense(status='approved', amount=Decimal('500.00'))
+
+        resp = self.client.post(reverse('expenses:review', kwargs={'pk': expense.pk}), {
+            'category': 'transport',
+            'amount': '999.00',
+            'currency': 'ARS',
+            'expense_date': '2025-03-15',
+            'vendor': 'Proveedor editado',
+            'description': 'Intento de reapertura',
+        })
+
+        self.assertEqual(resp.status_code, 302)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'approved')
+        self.assertEqual(expense.amount, Decimal('500.00'))
+
+
+class ExpenseAdminHardeningTest(BaseExpenseTestCase):
+    """Admin readonly para objetos que ya son inmutables por negocio."""
+
+    def test_closed_period_admin_is_readonly(self):
+        from apps.expenses.admin import ExpensePeriodAdmin
+        from django.contrib.admin.sites import AdminSite
+
+        self.period.status = 'closed'
+        self.period.closed_by = self.coordinator
+        self.period.closed_at = timezone.now()
+        self.period.save(update_fields=['status', 'closed_by', 'closed_at'])
+
+        admin_obj = ExpensePeriodAdmin(ExpensePeriod, AdminSite())
+        readonly = admin_obj.get_readonly_fields(None, self.period)
+
+        self.assertIn('status', readonly)
+        self.assertIn('date_from', readonly)
+        self.assertIn('date_to', readonly)
+
+    def test_expense_in_closed_period_admin_is_readonly(self):
+        from apps.expenses.admin import ExpenseAdmin
+        from django.contrib.admin.sites import AdminSite
+
+        self.period.status = 'closed'
+        self.period.closed_by = self.coordinator
+        self.period.closed_at = timezone.now()
+        self.period.save(update_fields=['status', 'closed_by', 'closed_at'])
+        expense = self._make_expense(status='settled')
+
+        admin_obj = ExpenseAdmin(Expense, AdminSite())
+        readonly = admin_obj.get_readonly_fields(None, expense)
+
+        self.assertIn('status', readonly)
+        self.assertIn('amount', readonly)
+        self.assertIn('period', readonly)
 
 
 # ─── Tests de inmutabilidad de período cerrado ────────────────────────────────
@@ -450,6 +633,9 @@ class MultisiteIsolationTest(TestCase):
         cls.coord_b.site = cls.site_b
         cls.coord_b.save()
 
+        cls.coord_no_site = User.objects.create_user(username='coord_no_site', password='pass')
+        cls.coord_no_site.groups.add(Group.objects.get(name='coordinator'))
+
         cls.protocol_b = Protocol.objects.create(
             code='PROT-B-01',
             name='Protocolo del site B',
@@ -534,6 +720,29 @@ class MultisiteIsolationTest(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, self.period_b.name)
+
+    def test_coordinator_without_site_cannot_approve_any_site_expense(self):
+        """Un coordinador sin site no recibe acceso global por omisión."""
+        self.client.force_login(self.coord_no_site)
+        url = reverse('expenses:approve', kwargs={'pk': self.expense_b.pk})
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_coordinator_without_site_sees_no_periods(self):
+        """Un coordinador sin site puede entrar a períodos, pero sin datos globales."""
+        self.client.force_login(self.coord_no_site)
+        url = reverse('periods:list')
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, self.period_b.name)
+
+    def test_report_index_without_site_sees_no_protocols(self):
+        """Reportes tampoco trata a coordinadores sin site como globales."""
+        self.client.force_login(self.coord_no_site)
+        url = reverse('reports:index')
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, self.protocol_b.code)
 
     def test_htmx_patients_cross_site_returns_empty(self):
         """htmx_patients_for_protocol retorna lista vacía para protocolo de otro site."""

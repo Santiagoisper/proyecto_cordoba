@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Recepción de ticket{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+  <div class="mb-6">
+    <a href="{% url 'expenses:reception_queue' %}" class="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-sm mb-4">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>Bandeja de recepción
+    </a>
+    <h1 class="text-2xl font-bold text-slate-900">Recibir comprobante</h1>
+    <p class="text-slate-500 text-sm mt-1">Subí la foto o PDF del ticket. La imputación clínica se hace después.</p>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+      {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="mb-5">
+      {{ form.file }}
+      <button type="button"
+              onclick="document.getElementById('ticket-file-input').click()"
+              class="w-full flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-300 hover:border-primary-400 rounded-xl py-8 px-4 transition-colors bg-slate-50 hover:bg-primary-50">
+        <div class="p-3 bg-primary-100 rounded-full">
+          <i data-lucide="scan-line" class="h-6 w-6 text-primary-600"></i>
+        </div>
+        <div class="text-center">
+          <p id="selected-file-name" class="text-sm font-medium text-slate-700">Tomar foto, subir imagen o PDF</p>
+          <p class="text-xs text-slate-400 mt-1">JPG, PNG, HEIC, PDF</p>
+        </div>
+      </button>
+      {% if form.file.errors %}<p class="text-xs text-red-600 mt-2">{{ form.file.errors.0 }}</p>{% endif %}
+    </div>
+
+    <div class="mb-5">
+      <label class="block text-sm font-medium text-slate-700 mb-1.5">Observación</label>
+      {{ form.notes }}
+      {% if form.notes.errors %}<p class="text-xs text-red-600 mt-1">{{ form.notes.errors.0 }}</p>{% endif %}
+    </div>
+
+    <button type="submit"
+            class="w-full bg-primary-700 hover:bg-primary-800 text-white font-semibold py-3 px-6 rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2">
+      <i data-lucide="upload" class="h-4 w-4"></i>
+      Guardar en recepción
+    </button>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const input = document.getElementById('ticket-file-input');
+if (input) {
+  input.addEventListener('change', function() {
+    const label = document.getElementById('selected-file-name');
+    if (label && input.files && input.files[0]) label.textContent = input.files[0].name;
+  });
+}
+</script>
+{% endblock %}

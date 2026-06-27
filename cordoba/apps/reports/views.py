@@ -20,13 +20,15 @@ def _can_report(user):
 
 
 def _is_global(user):
-    """True si el usuario no está restringido a un site concreto."""
-    return user.is_superuser or user.is_site_admin or not user.site_id
+    """True si el usuario puede operar fuera de un site concreto."""
+    return user.is_superuser or user.is_site_admin
 
 
 def _scope_protocol(user, qs):
     """Restringe el QS de Protocol al site del usuario (para no-globales)."""
     if not _is_global(user):
+        if not user.site_id:
+            return qs.none()
         qs = qs.filter(site_id=user.site_id)
     return qs
 
@@ -34,6 +36,8 @@ def _scope_protocol(user, qs):
 def _scope_patient(user, qs):
     """Restringe el QS de Patient al site del usuario (para no-globales)."""
     if not _is_global(user):
+        if not user.site_id:
+            return qs.none()
         qs = qs.filter(protocol__site_id=user.site_id)
     return qs
 
@@ -41,6 +45,8 @@ def _scope_patient(user, qs):
 def _scope_period(user, qs):
     """Restringe el QS de ExpensePeriod al site del usuario (para no-globales)."""
     if not _is_global(user):
+        if not user.site_id:
+            return qs.none()
         qs = qs.filter(protocol__site_id=user.site_id)
     return qs
 
@@ -220,15 +226,14 @@ def htmx_periods_for_protocol(request):
     protocol_id = request.GET.get('protocol')
     periods = []
     if protocol_id:
-        if not _is_global(request.user):
-            protocol = Protocol.objects.filter(
-                pk=protocol_id, site_id=request.user.site_id
-            ).first()
-            if not protocol:
-                return render(request, 'reports/partials/period_options.html', {'periods': []})
-        periods = ExpensePeriod.objects.filter(
+        protocol = _scope_protocol(
+            request.user, Protocol.objects.filter(pk=protocol_id)
+        ).first()
+        if not protocol:
+            return render(request, 'reports/partials/period_options.html', {'periods': []})
+        periods = _scope_period(request.user, ExpensePeriod.objects.filter(
             protocol_id=protocol_id
-        ).order_by('-date_from')
+        )).order_by('-date_from')
     return render(request, 'reports/partials/period_options.html', {'periods': periods})
 
 
@@ -241,15 +246,14 @@ def htmx_patients_for_protocol(request):
     protocol_id = request.GET.get('protocol')
     patients = []
     if protocol_id:
-        if not _is_global(request.user):
-            protocol = Protocol.objects.filter(
-                pk=protocol_id, site_id=request.user.site_id
-            ).first()
-            if not protocol:
-                return render(request, 'reports/partials/patient_options.html', {'patients': []})
-        patients = Patient.objects.filter(
+        protocol = _scope_protocol(
+            request.user, Protocol.objects.filter(pk=protocol_id)
+        ).first()
+        if not protocol:
+            return render(request, 'reports/partials/patient_options.html', {'patients': []})
+        patients = _scope_patient(request.user, Patient.objects.filter(
             protocol_id=protocol_id, is_active=True
-        ).order_by('patient_code')
+        )).order_by('patient_code')
     return render(request, 'reports/partials/patient_options.html', {'patients': patients})
 
 
@@ -263,13 +267,13 @@ def htmx_periods_for_patient(request):
     periods = []
     if patient_id:
         try:
-            patient_qs = Patient.objects.select_related('protocol')
-            if not _is_global(request.user):
-                patient_qs = patient_qs.filter(protocol__site_id=request.user.site_id)
+            patient_qs = _scope_patient(
+                request.user, Patient.objects.select_related('protocol')
+            )
             patient = patient_qs.get(pk=patient_id)
-            periods = ExpensePeriod.objects.filter(
+            periods = _scope_period(request.user, ExpensePeriod.objects.filter(
                 protocol=patient.protocol
-            ).order_by('-date_from')
+            )).order_by('-date_from')
         except Patient.DoesNotExist:
             pass
     return render(request, 'reports/partials/period_options.html', {'periods': periods})
