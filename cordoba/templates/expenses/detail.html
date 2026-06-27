@@ -159,8 +159,9 @@
 
   </div>
 
-  <!-- Botón corrección (asistente, gasto observado) -->
+  <!-- Botón corrección (asistente, gasto observado, período abierto) -->
   {% if expense.status == 'observed' and request.user == expense.submitted_by %}
+  {% if not expense.period or expense.period.status == 'open' %}
   <div class="mb-6">
     <a href="{% url 'expenses:correct' expense.pk %}"
        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
@@ -168,6 +169,12 @@
       Corregir y reenviar a revisión
     </a>
   </div>
+  {% else %}
+  <div class="mb-6 flex items-center gap-2 px-4 py-3 rounded-xl border bg-slate-50 border-slate-200 text-sm text-slate-600">
+    <i data-lucide="lock" class="h-4 w-4 shrink-0 text-slate-400"></i>
+    El período <strong>{{ expense.period.name }}</strong> está cerrado — no se permiten correcciones.
+  </div>
+  {% endif %}
   {% endif %}
 
   <!-- Timeline de auditoría -->

@@ -11,6 +11,13 @@ class User(AbstractUser):
     - assistant
     - auditor
     """
+    site = models.ForeignKey(
+        'protocols.Site',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='users',
+        help_text="Site de investigación al que pertenece este usuario (multisite)",
+    )
     site_name = models.CharField(max_length=200, blank=True)
     phone = models.CharField(max_length=30, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

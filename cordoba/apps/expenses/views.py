@@ -60,11 +60,15 @@ def expense_list(request):
         qs = Expense.objects.select_related(
             'visit__patient__protocol', 'visit__visit_type', 'submitted_by'
         ).order_by('-created_at')
+        if not user.is_superuser and not user.is_site_admin and user.site_id:
+            qs = qs.filter(visit__patient__protocol__site=user.site)
         title = 'Todos los gastos'
     else:
         qs = Expense.objects.filter(submitted_by=user).select_related(
             'visit__patient__protocol', 'visit__visit_type'
         ).order_by('-created_at')
+        if user.site_id:
+            qs = qs.filter(visit__patient__protocol__site=user.site)
         title = 'Mis gastos'
 
     return render(request, 'expenses/list.html', {
@@ -451,6 +455,7 @@ def period_list(request):
     if not _can_coordinate(request.user):
         return HttpResponseForbidden("No tenés permiso para ver períodos.")
 
+    user = request.user
     periods = (
         ExpensePeriod.objects
         .select_related('protocol', 'closed_by', 'created_by')
@@ -465,11 +470,16 @@ def period_list(request):
         .order_by('-date_from')
     )
 
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        periods = periods.filter(protocol__site=user.site)
+
+    protocols = Protocol.objects.filter(is_active=True).order_by('code')
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        protocols = protocols.filter(site=user.site)
+
     protocol_id = request.GET.get('protocol')
     if protocol_id:
         periods = periods.filter(protocol_id=protocol_id)
-
-    protocols = Protocol.objects.filter(is_active=True).order_by('code')
 
     return render(request, 'expenses/periods.html', {
         'periods': periods,

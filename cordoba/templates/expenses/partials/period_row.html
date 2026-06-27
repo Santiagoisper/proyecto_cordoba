@@ -81,32 +81,47 @@
     </span>
   </td>
 
-  <!-- Acción de cierre -->
+  <!-- Acciones: cierre + PDF -->
   <td class="px-4 py-3 text-center">
-    {% if period.status == 'open' %}
-      {% if period.count_pending > 0 %}
-        <span class="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg cursor-not-allowed"
-              title="Hay gastos pendientes de revisión. Aprobá o rechazá todos antes de cerrar.">
-          <i data-lucide="alert-triangle" class="h-3.5 w-3.5"></i> {{ period.count_pending }} pendiente{{ period.count_pending|pluralize:"s" }}
-        </span>
-      {% else %}
-        <form method="post" action="{% url 'periods:close' period.pk %}" class="inline"
-              onsubmit="return confirm('¿Cerrar el período «{{ period.name }}»? Esta acción liquidará todos los gastos aprobados y no podrá deshacerse.')">
-          {% csrf_token %}
-          <button type="submit"
-                  hx-post="{% url 'periods:close' period.pk %}"
-                  hx-target="#period-row-{{ period.pk }}"
-                  hx-swap="outerHTML"
-                  hx-confirm="¿Cerrar el período «{{ period.name }}»? Esta acción liquidará todos los gastos aprobados y no podrá deshacerse."
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                         bg-slate-800 hover:bg-slate-900 text-white transition-colors">
-            <i data-lucide="lock" class="h-3.5 w-3.5"></i> Cerrar período
-          </button>
-        </form>
+    <div class="flex flex-col items-center gap-1.5">
+
+      {% if period.status == 'open' %}
+        {% if period.count_pending > 0 %}
+          <span class="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg cursor-not-allowed"
+                title="Hay gastos pendientes de revisión. Aprobá o rechazá todos antes de cerrar.">
+            <i data-lucide="alert-triangle" class="h-3.5 w-3.5"></i> {{ period.count_pending }} pendiente{{ period.count_pending|pluralize:"s" }}
+          </span>
+        {% else %}
+          <form method="post" action="{% url 'periods:close' period.pk %}" class="inline"
+                onsubmit="return confirm('¿Cerrar el período «{{ period.name }}»? Esta acción liquidará todos los gastos aprobados y no podrá deshacerse.')">
+            {% csrf_token %}
+            <button type="submit"
+                    hx-post="{% url 'periods:close' period.pk %}"
+                    hx-target="#period-row-{{ period.pk }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="¿Cerrar el período «{{ period.name }}»? Esta acción liquidará todos los gastos aprobados y no podrá deshacerse."
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                           bg-slate-800 hover:bg-slate-900 text-white transition-colors">
+              <i data-lucide="lock" class="h-3.5 w-3.5"></i> Cerrar período
+            </button>
+          </form>
+        {% endif %}
       {% endif %}
-    {% else %}
-      <span class="text-xs text-slate-400">—</span>
-    {% endif %}
+
+      <!-- PDF del período (solo coordinadores/admins con acceso a reportes) -->
+      <form method="post" action="{% url 'reports:site_pdf' %}" class="inline">
+        {% csrf_token %}
+        <input type="hidden" name="protocol_id" value="{{ period.protocol.pk }}">
+        <input type="hidden" name="period_id" value="{{ period.pk }}">
+        <button type="submit"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium
+                       text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors"
+                title="Descargar PDF consolidado del período">
+          <i data-lucide="file-down" class="h-3 w-3"></i> PDF
+        </button>
+      </form>
+
+    </div>
   </td>
 
 </tr>
