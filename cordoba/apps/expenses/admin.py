@@ -75,6 +75,36 @@ class ExpenseAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+@admin.register(TicketFile)
+class TicketFileAdmin(admin.ModelAdmin):
+    list_display = ['id', 'expense', 'original_filename', 'ocr_status', 'uploaded_by', 'uploaded_at']
+    list_filter = ['ocr_status', 'mime_type']
+    search_fields = [
+        'expense__visit__patient__patient_code',
+        'expense__visit__patient__protocol__code',
+        'original_filename',
+    ]
+    readonly_fields = [
+        'uploaded_at', 'uploaded_by', 'file_size', 'mime_type',
+        'ocr_task_id', 'ocr_status',
+    ]
+    fieldsets = (
+        ('Archivo', {
+            'fields': ('expense', 'file', 'original_filename', 'file_size', 'mime_type')
+        }),
+        ('OCR', {
+            'fields': ('ocr_status', 'ocr_task_id'),
+        }),
+        ('Auditoría', {
+            'fields': ('uploaded_by', 'uploaded_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
     list_display = ['timestamp', 'user', 'action', 'content_type', 'object_id', 'ip_address']
