@@ -1,7 +1,7 @@
 """
-Servicio OCR para Proyecto Córdoba.
-Adaptador Veryfi con modo mock para desarrollo sin API key.
-Trabaja con bytes del archivo (compatible con almacenamiento local y S3).
+Servicios para Proyecto Córdoba.
+- OCRService: adaptador Veryfi con modo mock.
+- ExpenseValidationService: validaciones automáticas de gastos.
 """
 import re
 import json
@@ -13,7 +13,7 @@ import requests
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List
 
 from django.conf import settings
 
@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 CUIT_REGEX = re.compile(r'\b(\d{2}-\d{8}-\d)\b')
 
+
+# ─── OCR ──────────────────────────────────────────────────────────────────────
 
 @dataclass
 class OCRResult:
@@ -60,30 +62,19 @@ class OCRService:
         return all([self.client_id, self.client_secret, self.username, self.api_key])
 
     def process_bytes(self, file_bytes: bytes, filename: str = 'ticket') -> OCRResult:
-        """
-        Procesa bytes de un archivo de ticket y retorna los datos extraídos.
-        Acepta bytes directamente para ser compatible con almacenamiento local y S3.
-        En modo mock (sin credenciales), retorna datos vacíos con baja confianza.
-        Errores de API/red se propagan como excepciones para que Celery los reintente.
-        """
         if not self.has_credentials():
             logger.info("OCR: sin credenciales Veryfi — modo mock activado")
             return self._mock_result()
-
-        # Las excepciones de Veryfi API se propagan para que Celery haga retry
         return self._veryfi_process(file_bytes, filename)
 
     def _veryfi_process(self, file_bytes: bytes, filename: str) -> OCRResult:
-        """Llama a la API de Veryfi y parsea la respuesta."""
         file_b64 = base64.b64encode(file_bytes).decode('utf-8')
-
         payload = {
             'file_name': filename,
             'file_data': file_b64,
             'categories': ['Transport', 'Meals', 'Accommodation', 'Other'],
             'auto_delete': False,
         }
-
         headers = self._build_headers(json.dumps(payload))
         response = requests.post(
             f'{self.VERYFI_BASE_URL}/partner/documents/',
@@ -92,8 +83,7 @@ class OCRService:
             timeout=30,
         )
         response.raise_for_status()
-        data = response.json()
-        return self._parse_veryfi_response(data)
+        return self._parse_veryfi_response(response.json())
 
     def _build_headers(self, payload_str: str) -> dict:
         timestamp = int(datetime.now().timestamp() * 1000)
@@ -105,7 +95,6 @@ class OCRService:
                 hashlib.sha256,
             ).digest()
         ).decode('utf-8')
-
         return {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -116,10 +105,7 @@ class OCRService:
         }
 
     def _parse_veryfi_response(self, data: dict) -> OCRResult:
-        """Extrae y normaliza campos desde la respuesta de Veryfi."""
         result = OCRResult(raw_response=data)
-
-        # Monto total
         total = data.get('total')
         if total is not None:
             try:
@@ -127,8 +113,6 @@ class OCRService:
                 result.confidence_amount = 0.9
             except InvalidOperation:
                 pass
-
-        # Fecha del ticket
         date_str = data.get('date')
         if date_str:
             for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y'):
@@ -138,8 +122,6 @@ class OCRService:
                     break
                 except ValueError:
                     continue
-
-        # Proveedor/comercio
         vendor = data.get('vendor', {})
         if isinstance(vendor, dict):
             result.vendor = vendor.get('name', '')
@@ -147,39 +129,118 @@ class OCRService:
             result.vendor = vendor
         if result.vendor:
             result.confidence_vendor = 0.8
-
-        # CUIT argentino (buscar en los datos crudos)
         raw_text = json.dumps(data)
         cuit_match = CUIT_REGEX.search(raw_text)
         if cuit_match:
             result.cuit = cuit_match.group(1)
             result.confidence_cuit = 0.75
-
-        # Número de comprobante
         invoice_number = data.get('invoice_number') or data.get('reference_number', '')
         if invoice_number:
             result.receipt_number = str(invoice_number)
             result.confidence_receipt = 0.7
-
         result.success = True
         return result
 
     def _mock_result(self) -> OCRResult:
-        """
-        Resultado mock para desarrollo sin credenciales.
-        Retorna campos vacíos con confianza 0 para que el asistente los complete.
-        """
         return OCRResult(
-            amount=None,
-            expense_date=None,
-            vendor='',
-            cuit='',
-            receipt_number='',
-            confidence_amount=0.0,
-            confidence_date=0.0,
-            confidence_vendor=0.0,
-            confidence_cuit=0.0,
-            confidence_receipt=0.0,
             raw_response={'mock': True, 'message': 'Modo desarrollo — sin credenciales Veryfi'},
             success=True,
         )
+
+
+# ─── Validaciones automáticas ─────────────────────────────────────────────────
+
+@dataclass
+class ValidationAlert:
+    level: str      # 'error' | 'warning'
+    code: str       # identificador único de la alerta
+    message: str    # mensaje legible para el coordinador
+
+
+class ExpenseValidationService:
+    """
+    Valida un gasto contra las reglas de negocio del protocolo.
+    Retorna una lista de ValidationAlert (puede estar vacía si todo está bien).
+    """
+
+    def validate(self, expense) -> List[ValidationAlert]:
+        alerts: List[ValidationAlert] = []
+        alerts.extend(self._check_date_window(expense))
+        alerts.extend(self._check_amount_cap(expense))
+        alerts.extend(self._check_duplicate(expense))
+        return alerts
+
+    def _check_date_window(self, expense) -> List[ValidationAlert]:
+        """Valida que la fecha del ticket esté dentro de la ventana de la visita."""
+        try:
+            window_start = expense.visit.get_ticket_window_start()
+            window_end = expense.visit.get_ticket_window_end()
+            exp_date = expense.expense_date
+            if exp_date < window_start or exp_date > window_end:
+                return [ValidationAlert(
+                    level='warning',
+                    code='date_out_of_window',
+                    message=(
+                        f'Fecha fuera de ventana de visita: '
+                        f'{exp_date:%d/%m/%Y} (ventana: {window_start:%d/%m/%Y} – {window_end:%d/%m/%Y})'
+                    ),
+                )]
+        except Exception:
+            pass
+        return []
+
+    def _check_amount_cap(self, expense) -> List[ValidationAlert]:
+        """Valida que el monto no supere el tope diario de la categoría."""
+        try:
+            protocol = expense.visit.patient.protocol
+            cap = None
+            if expense.category == 'meals':
+                cap = protocol.max_daily_meals
+            elif expense.category == 'transport':
+                cap = protocol.max_daily_transport
+            elif expense.category == 'accommodation':
+                cap = protocol.max_daily_accommodation
+
+            if cap is not None and expense.amount > cap:
+                return [ValidationAlert(
+                    level='error',
+                    code='amount_exceeds_cap',
+                    message=(
+                        f'Monto supera el tope diario: '
+                        f'${expense.amount:.2f} > ${cap:.2f} ({expense.get_category_display()})'
+                    ),
+                )]
+        except Exception:
+            pass
+        return []
+
+    def _check_duplicate(self, expense) -> List[ValidationAlert]:
+        """
+        Detecta posibles duplicados: mismo gasto (visita, categoría, fecha, monto)
+        excluyendo rechazados y el propio gasto.
+        """
+        try:
+            from .models import Expense
+            duplicates = Expense.objects.filter(
+                visit=expense.visit,
+                category=expense.category,
+                expense_date=expense.expense_date,
+                amount=expense.amount,
+            ).exclude(
+                pk=expense.pk,
+            ).exclude(
+                status='rejected',
+            )
+            if duplicates.exists():
+                return [ValidationAlert(
+                    level='error',
+                    code='possible_duplicate',
+                    message=(
+                        f'Posible duplicado: ya existe un gasto de '
+                        f'${expense.amount:.2f} ({expense.get_category_display()}) '
+                        f'para esta visita y fecha.'
+                    ),
+                )]
+        except Exception:
+            pass
+        return []

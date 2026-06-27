@@ -1,0 +1,129 @@
+<tr id="expense-row-{{ item.expense.pk }}" class="hover:bg-slate-50 transition-colors">
+
+  <!-- Thumbnail del ticket -->
+  <td class="px-4 py-3">
+    {% if item.ticket and item.ticket.file %}
+      {% if item.ticket.mime_type == 'application/pdf' %}
+        <a href="{{ item.ticket.file.url }}" target="_blank"
+           class="flex items-center justify-center w-12 h-12 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
+          <i data-lucide="file-text" class="h-6 w-6 text-red-500"></i>
+        </a>
+      {% else %}
+        <a href="{% url 'expenses:detail' item.expense.pk %}" target="_blank">
+          <img src="{{ item.ticket.file.url }}"
+               alt="Ticket"
+               class="w-12 h-12 object-cover rounded-lg border border-slate-200 hover:opacity-80 transition-opacity">
+        </a>
+      {% endif %}
+    {% else %}
+      <div class="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
+        <i data-lucide="image-off" class="h-5 w-5 text-slate-400"></i>
+      </div>
+    {% endif %}
+  </td>
+
+  <!-- Paciente / Visita / Protocolo -->
+  <td class="px-4 py-3">
+    <a href="{% url 'expenses:detail' item.expense.pk %}"
+       class="font-medium text-slate-900 hover:text-blue-600 text-sm">
+      {{ item.expense.visit.patient }}
+    </a>
+    <p class="text-xs text-slate-500">
+      {{ item.expense.visit.visit_type.name }}
+      · {{ item.expense.visit.patient.protocol.code }}
+    </p>
+    <p class="text-xs text-slate-400">
+      Cargado por {{ item.expense.submitted_by.get_full_name|default:item.expense.submitted_by.username }}
+    </p>
+  </td>
+
+  <!-- Categoría -->
+  <td class="px-4 py-3">
+    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+      {% if item.expense.category == 'transport' %}bg-blue-100 text-blue-700
+      {% elif item.expense.category == 'meals' %}bg-orange-100 text-orange-700
+      {% elif item.expense.category == 'accommodation' %}bg-purple-100 text-purple-700
+      {% else %}bg-slate-100 text-slate-600{% endif %}">
+      {{ item.expense.get_category_display }}
+    </span>
+  </td>
+
+  <!-- Fecha -->
+  <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
+    {{ item.expense.expense_date|date:"d/m/Y" }}
+    <p class="text-xs text-slate-400">{{ item.expense.created_at|date:"d/m/Y H:i" }}</p>
+  </td>
+
+  <!-- Monto -->
+  <td class="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
+    ${{ item.expense.amount|floatformat:2 }}
+    <p class="text-xs text-slate-500 font-normal">{{ item.expense.currency }}</p>
+  </td>
+
+  <!-- Alertas de validación -->
+  <td class="px-4 py-3">
+    {% if item.alerts %}
+      <div class="flex flex-col gap-1">
+        {% for alert in item.alerts %}
+          <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium
+            {% if alert.level == 'error' %}bg-red-100 text-red-700
+            {% else %}bg-amber-100 text-amber-700{% endif %}"
+            title="{{ alert.message }}">
+            {% if alert.level == 'error' %}
+              <i data-lucide="alert-circle" class="h-3 w-3 shrink-0"></i>
+            {% else %}
+              <i data-lucide="alert-triangle" class="h-3 w-3 shrink-0"></i>
+            {% endif %}
+            <span class="truncate max-w-[140px]">
+              {% if alert.code == 'date_out_of_window' %}Fecha fuera de ventana
+              {% elif alert.code == 'amount_exceeds_cap' %}Tope excedido
+              {% elif alert.code == 'possible_duplicate' %}Posible duplicado
+              {% else %}{{ alert.message|truncatechars:30 }}
+              {% endif %}
+            </span>
+          </span>
+        {% endfor %}
+      </div>
+    {% else %}
+      <span class="text-xs text-green-600 flex items-center gap-1">
+        <i data-lucide="check" class="h-3 w-3"></i> OK
+      </span>
+    {% endif %}
+  </td>
+
+  <!-- Acciones -->
+  <td class="px-4 py-3">
+    <div class="flex items-center justify-end gap-1.5">
+
+      <!-- Aprobar (directo, sin modal) -->
+      <button
+        hx-post="{% url 'expenses:approve' item.expense.pk %}"
+        hx-target="#expense-row-{{ item.expense.pk }}"
+        hx-swap="outerHTML"
+        hx-confirm="¿Aprobar el gasto de ${{ item.expense.amount|floatformat:2 }} ({{ item.expense.get_category_display }})?"
+        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-green-600 hover:bg-green-700 text-white transition-colors">
+        <i data-lucide="check" class="h-3.5 w-3.5"></i> Aprobar
+      </button>
+
+      <!-- Rechazar (abre modal) -->
+      <button
+        hx-get="{% url 'expenses:action_modal' item.expense.pk 'reject' %}"
+        hx-target="#modal-container"
+        hx-swap="innerHTML"
+        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-100 hover:bg-red-200 text-red-700 transition-colors">
+        <i data-lucide="x" class="h-3.5 w-3.5"></i> Rechazar
+      </button>
+
+      <!-- Observar (abre modal) -->
+      <button
+        hx-get="{% url 'expenses:action_modal' item.expense.pk 'observe' %}"
+        hx-target="#modal-container"
+        hx-swap="innerHTML"
+        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors">
+        <i data-lucide="message-square" class="h-3.5 w-3.5"></i> Observar
+      </button>
+
+    </div>
+  </td>
+
+</tr>

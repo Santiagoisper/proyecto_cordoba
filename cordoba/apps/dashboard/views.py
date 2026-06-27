@@ -1,6 +1,6 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Q
+from django.utils import timezone
 
 
 PENDING_STATUSES = ['ocr_pending', 'pending_review']
@@ -9,9 +9,7 @@ PENDING_STATUSES = ['ocr_pending', 'pending_review']
 @login_required
 def dashboard(request):
     user = request.user
-    context = {
-        'user': user,
-    }
+    context = {'user': user}
 
     if user.is_superuser or user.is_site_admin:
         context.update(_admin_context(user))
@@ -50,30 +48,54 @@ def _admin_context(user):
 
 def _coordinator_context(user):
     from apps.expenses.models import Expense
+    from apps.expenses.services import ExpenseValidationService
 
-    pending = Expense.objects.filter(status='pending_review').select_related(
+    today = timezone.now().date()
+
+    pending_qs = Expense.objects.filter(status='pending_review').select_related(
         'visit__patient__protocol',
         'visit__visit_type',
-        'submitted_by'
-    ).order_by('-created_at')
+        'submitted_by',
+    ).prefetch_related('ticket_files').order_by('created_at')
+
+    observed_qs = Expense.objects.filter(status='observed').select_related(
+        'visit__patient__protocol',
+        'visit__visit_type',
+        'submitted_by',
+        'reviewed_by',
+    ).order_by('-reviewed_at')
+
+    svc = ExpenseValidationService()
+    pending_with_alerts = []
+    for expense in pending_qs[:30]:
+        alerts = svc.validate(expense)
+        pending_with_alerts.append({
+            'expense': expense,
+            'alerts': alerts,
+            'has_errors': any(a.level == 'error' for a in alerts),
+            'has_warnings': any(a.level == 'warning' for a in alerts),
+            'ticket': expense.ticket_files.first(),
+        })
 
     return {
-        'pending_count': pending.count(),
-        'pending_expenses': pending[:10],
+        'pending_count': pending_qs.count(),
+        'observed_count': observed_qs.count(),
         'approved_today': Expense.objects.filter(
-            status='approved', reviewed_by=user
+            status='approved', reviewed_by=user, reviewed_at__date=today
         ).count(),
+        'rejected_today': Expense.objects.filter(
+            status='rejected', reviewed_by=user, reviewed_at__date=today
+        ).count(),
+        'pending_with_alerts': pending_with_alerts,
+        'observed_expenses': list(observed_qs[:10]),
     }
 
 
 def _assistant_context(user):
     from apps.expenses.models import Expense
 
-    my_expenses = Expense.objects.filter(
-        submitted_by=user
-    ).select_related(
-        'visit__patient__protocol',
-        'visit__visit_type'
+    my_expenses = Expense.objects.filter(submitted_by=user).select_related(
+        'visit__patient__protocol', 'visit__visit_type'
     ).order_by('-created_at')
 
     return {
@@ -81,6 +103,7 @@ def _assistant_context(user):
         'pending_count': my_expenses.filter(status__in=PENDING_STATUSES).count(),
         'approved_count': my_expenses.filter(status='approved').count(),
         'rejected_count': my_expenses.filter(status='rejected').count(),
+        'observed_count': my_expenses.filter(status='observed').count(),
     }
 
 

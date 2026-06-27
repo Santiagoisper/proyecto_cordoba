@@ -193,6 +193,7 @@ class AuditLog(models.Model):
         ('approved', 'Aprobado'),
         ('rejected', 'Rechazado'),
         ('observed', 'Observado'),
+        ('corrected', 'Corregido'),
         ('ocr_completed', 'OCR completado'),
         ('ocr_failed', 'OCR fallido'),
         ('period_closed', 'Período cerrado'),

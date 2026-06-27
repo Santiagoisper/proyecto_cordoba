@@ -1,0 +1,40 @@
+<tr id="expense-row-{{ expense.pk }}"
+    class="transition-all {% if action == 'approved' %}bg-green-50{% elif action == 'rejected' %}bg-red-50{% else %}bg-blue-50{% endif %}">
+  <td class="px-4 py-3" colspan="7">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        {% if action == 'approved' %}
+          <i data-lucide="check-circle" class="h-5 w-5 text-green-600 shrink-0"></i>
+          <div>
+            <span class="text-sm font-medium text-green-800">
+              Gasto aprobado — {{ expense.visit.patient }} · {{ expense.get_category_display }} · ${{ expense.amount|floatformat:2 }}
+            </span>
+            <p class="text-xs text-green-600">Aprobado por {{ expense.reviewed_by.get_full_name|default:expense.reviewed_by.username }}</p>
+          </div>
+        {% elif action == 'rejected' %}
+          <i data-lucide="x-circle" class="h-5 w-5 text-red-500 shrink-0"></i>
+          <div>
+            <span class="text-sm font-medium text-red-800">
+              Gasto rechazado — {{ expense.visit.patient }} · {{ expense.get_category_display }} · ${{ expense.amount|floatformat:2 }}
+            </span>
+            {% if expense.review_notes %}
+            <p class="text-xs text-red-600">Motivo: {{ expense.review_notes|truncatechars:80 }}</p>
+            {% endif %}
+          </div>
+        {% else %}
+          <i data-lucide="message-square" class="h-5 w-5 text-blue-600 shrink-0"></i>
+          <div>
+            <span class="text-sm font-medium text-blue-800">
+              Gasto observado — {{ expense.visit.patient }} · {{ expense.get_category_display }} · ${{ expense.amount|floatformat:2 }}
+            </span>
+            {% if expense.review_notes %}
+            <p class="text-xs text-blue-600">Nota: {{ expense.review_notes|truncatechars:80 }}</p>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+      <a href="{% url 'expenses:detail' expense.pk %}"
+         class="text-xs text-slate-500 hover:text-slate-700 underline shrink-0">Ver detalle</a>
+    </div>
+  </td>
+</tr>
