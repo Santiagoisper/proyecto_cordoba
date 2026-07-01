@@ -1,359 +1,324 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full">
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Iniciar sesión — Proyecto Córdoba</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: {
-              50: '#f0f7ff',
-              100: '#e0f2ff',
-              200: '#b8e6ff',
-              300: '#7dd3fc',
-              400: '#38bdf8',
-              500: '#0ea5e9',
-              600: '#0284c7',
-              700: '#0369a1',
-              800: '#075985',
-              900: '#0c4a6e',
-            },
-            secondary: {
-              600: '#16a34a',
-              700: '#15803d',
-              800: '#166534',
-            }
-          },
-          animation: {
-            'fade-in': 'fadeIn 0.6s ease-in-out',
-            'slide-up': 'slideUp 0.8s ease-out',
-          },
-          keyframes: {
-            fadeIn: {
-              '0%': { opacity: '0' },
-              '100%': { opacity: '1' },
-            },
-            slideUp: {
-              '0%': { transform: 'translateY(20px)', opacity: '0' },
-              '100%': { transform: 'translateY(0)', opacity: '1' },
-            }
-          }
-        }
-      }
-    }
-  </script>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
-      background: linear-gradient(135deg, #0c4a6e 0%, #075985 25%, #0369a1 50%, #15803d 100%);
+      background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0a2c48 100%);
       min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       position: relative;
       overflow: hidden;
     }
 
-    /* Elementos decorativos de fondo */
-    .bg-pattern {
-      position: fixed;
-      inset: 0;
-      overflow: hidden;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .blob {
+    /* Fondo científico animado */
+    .bg-scientific {
       position: absolute;
-      border-radius: 50%;
-      filter: blur(60px);
-      opacity: 0.1;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
     }
 
-    .blob-1 {
-      width: 400px;
-      height: 400px;
-      background: #ffffff;
-      top: -100px;
-      right: -100px;
-      animation: float 8s ease-in-out infinite;
+    .dna-strand {
+      position: absolute;
+      opacity: 0.08;
+      font-size: 4rem;
+      color: white;
+      animation: float 6s ease-in-out infinite;
     }
 
-    .blob-2 {
-      width: 300px;
-      height: 300px;
-      background: #00ff88;
-      bottom: -100px;
-      left: -100px;
-      animation: float 10s ease-in-out infinite reverse;
-    }
-
-    .blob-3 {
-      width: 250px;
-      height: 250px;
-      background: #ffffff;
-      bottom: 100px;
-      right: 50px;
-      animation: float 12s ease-in-out infinite;
-    }
+    .dna-1 { top: 10%; left: 5%; animation-delay: 0s; }
+    .dna-2 { top: 60%; right: 8%; animation-delay: 1s; }
+    .dna-3 { top: 20%; right: 15%; animation-delay: 2s; }
+    .dna-4 { top: 70%; left: 12%; animation-delay: 1.5s; }
 
     @keyframes float {
       0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(30px); }
+      50% { transform: translateY(20px); }
     }
 
-    .grid-pattern {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      background-image:
-        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-      background-size: 50px 50px;
+    .navbar {
+      position: relative;
+      z-index: 50;
+      background: linear-gradient(to right, #0c4a6e, rgba(12, 74, 110, 0.98));
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 1.5rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: white;
+    }
+
+    .navbar-links {
+      display: flex;
+      gap: 2rem;
+    }
+
+    .navbar-link {
+      color: rgba(255, 255, 255, 0.8);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+
+    .navbar-link:hover {
+      color: white;
     }
 
     .content {
       position: relative;
       z-index: 10;
-    }
-
-    .login-card {
-      backdrop-filter: blur(10px);
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .input-field {
-      transition: all 0.3s ease;
-      background: rgba(255, 255, 255, 0.7);
-    }
-
-    .input-field:focus {
-      background: rgba(255, 255, 255, 0.95);
-      box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.1);
-    }
-
-    .submit-btn {
-      background: linear-gradient(135deg, #0369a1 0%, #15803d 100%);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .submit-btn::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.2) 50%, transparent 100%);
-      animation: shimmer 3s infinite;
-    }
-
-    @keyframes shimmer {
-      0% { left: -100%; }
-      100% { left: 100%; }
-    }
-
-    .logo-icon {
-      display: inline-flex;
+      flex: 1;
+      display: flex;
       align-items: center;
       justify-content: center;
-      width: 56px;
-      height: 56px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, #0369a1 0%, #15803d 100%);
-      box-shadow: 0 10px 30px rgba(3, 105, 161, 0.3);
+      padding: 3rem 1.5rem;
     }
 
-    .tagline {
-      background: linear-gradient(135deg, #0369a1 0%, #15803d 100%);
+    .login-container {
+      width: 100%;
+      max-width: 500px;
+    }
+
+    .header-section {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      animation: slideUp 0.8s ease-out;
+    }
+
+    .badge {
+      display: inline-block;
+      background: white;
+      color: #0369a1;
+      padding: 0.5rem 1.25rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.05em;
+    }
+
+    .header-title {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: white;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+
+    .header-title .highlight {
+      background: linear-gradient(135deg, #38bdf8, #16a34a);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
+
+    .header-description {
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .login-card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 1rem;
+      padding: 2.5rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      animation: slideUp 0.8s ease-out 0.2s both;
+    }
+
+    .form-section {
+      margin-bottom: 2rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #0c4a6e;
+      margin-bottom: 0.75rem;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+      background: white;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #0369a1;
+      box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.1);
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 0.875rem 1.5rem;
+      background: linear-gradient(135deg, #0369a1, #15803d);
+      color: white;
+      border: none;
+      border-radius: 0.75rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(3, 105, 161, 0.3);
+    }
+
+    .footer-text {
+      text-align: center;
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 1.5rem;
+      line-height: 1.6;
+    }
+
+    .footer-text a {
+      color: rgba(255, 255, 255, 0.8);
+      text-decoration: none;
+    }
+
+    .footer-text a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
+  <div class="bg-scientific">
+    <div class="dna-strand dna-1">🧬</div>
+    <div class="dna-strand dna-2">🧪</div>
+    <div class="dna-strand dna-3">🔬</div>
+    <div class="dna-strand dna-4">🧬</div>
+  </div>
 
-<div class="bg-pattern">
-  <div class="grid-pattern"></div>
-  <div class="blob blob-1"></div>
-  <div class="blob blob-2"></div>
-  <div class="blob blob-3"></div>
-</div>
-
-<div class="content min-h-screen flex items-center justify-center py-12 px-4">
-  <div class="max-w-sm w-full animate-slide-up">
-
-    <div class="text-center mb-8 animate-fade-in">
-      <div class="logo-icon mb-4">
-        <i data-lucide="beaker" class="h-8 w-8 text-white"></i>
-      </div>
-      <h1 class="text-3xl font-bold text-white mb-2">
-        Proyecto C<button
-          type="button"
-          id="cordoba-easter-egg-trigger"
-          class="font-bold text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-primary-700 rounded-sm"
-          aria-label="Abrir mensaje especial"
-        >ó</button>rdoba
-      </h1>
-      <p class="tagline text-sm font-semibold">Sistema Profesional de Viáticos Clínicos</p>
-      <p class="text-white/70 text-xs mt-2">Investigación Clínica Segura y Transparente</p>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <i data-lucide="beaker" class="w-7 h-7"></i>
+      <span>Proyecto Córdoba</span>
     </div>
+    <div class="navbar-links">
+      <a href="#" class="navbar-link">Home</a>
+      <a href="#" class="navbar-link">Registrar Site</a>
+    </div>
+  </nav>
 
-    <div class="login-card rounded-3xl shadow-2xl p-8 animate-slide-up" style="animation-delay: 0.2s;">
-      <h2 class="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-        <i data-lucide="lock" class="h-5 w-5 text-primary-700"></i>
-        Acceso Seguro
-      </h2>
+  <!-- Main Content -->
+  <div class="content">
+    <div class="login-container">
+      <div class="header-section">
+        <div class="badge">SISTEMA CLÍNICO PROFESIONAL</div>
+        <h1 class="header-title">
+          Gestión de <span class="highlight">Viáticos</span><br>
+          con Excelencia
+        </h1>
+        <p class="header-description">
+          Plataforma integral para seguimiento y auditoría de gastos en investigación clínica
+        </p>
+      </div>
 
-      <form method="post" action="{% url 'account_login' %}" class="space-y-4">
-        {% csrf_token %}
+      <div class="login-card">
+        <form method="post" action="{% url 'account_login' %}" class="space-y-6">
+          {% csrf_token %}
 
-        {% if form.non_field_errors %}
-        <div class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex gap-2">
-          <i data-lucide="alert-circle" class="h-4 w-4 flex-shrink-0 mt-0.5"></i>
-          <div>
+          {% if form.non_field_errors %}
+          <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
             {% for error in form.non_field_errors %}
               <p>{{ error }}</p>
             {% endfor %}
           </div>
-        </div>
-        {% endif %}
-
-        <div>
-          <label for="{{ form.login.id_for_label }}" class="block text-sm font-semibold text-slate-700 mb-2">
-            <i data-lucide="user" class="h-4 w-4 inline mr-1 text-primary-600"></i>
-            Usuario
-          </label>
-          <input
-            type="text"
-            name="{{ form.login.html_name }}"
-            id="{{ form.login.id_for_label }}"
-            autocomplete="username"
-            required
-            class="input-field w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-primary-500 text-sm"
-            placeholder="Tu nombre de usuario"
-            value="{{ form.login.value|default:'' }}"
-          />
-          {% if form.login.errors %}
-          <p class="text-xs text-red-600 mt-1.5 flex gap-1">
-            <i data-lucide="x-circle" class="h-3 w-3 flex-shrink-0"></i>
-            {{ form.login.errors.0 }}
-          </p>
           {% endif %}
-        </div>
 
-        <div>
-          <label for="{{ form.password.id_for_label }}" class="block text-sm font-semibold text-slate-700 mb-2">
-            <i data-lucide="key" class="h-4 w-4 inline mr-1 text-primary-600"></i>
-            Contraseña
-          </label>
-          <input
-            type="password"
-            name="{{ form.password.html_name }}"
-            id="{{ form.password.id_for_label }}"
-            autocomplete="current-password"
-            required
-            class="input-field w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-primary-500 text-sm"
-            placeholder="••••••••"
-          />
-          {% if form.password.errors %}
-          <p class="text-xs text-red-600 mt-1.5 flex gap-1">
-            <i data-lucide="x-circle" class="h-3 w-3 flex-shrink-0"></i>
-            {{ form.password.errors.0 }}
-          </p>
+          <div class="form-section">
+            <label for="{{ form.login.id_for_label }}" class="form-label">
+              Usuario
+            </label>
+            <input
+              type="text"
+              name="{{ form.login.html_name }}"
+              id="{{ form.login.id_for_label }}"
+              autocomplete="username"
+              required
+              class="form-input"
+              placeholder="Tu nombre de usuario"
+              value="{{ form.login.value|default:'' }}"
+            />
+            {% if form.login.errors %}
+            <p class="text-xs text-red-600 mt-1">{{ form.login.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          <div class="form-section">
+            <label for="{{ form.password.id_for_label }}" class="form-label">
+              Contraseña
+            </label>
+            <input
+              type="password"
+              name="{{ form.password.html_name }}"
+              id="{{ form.password.id_for_label }}"
+              autocomplete="current-password"
+              required
+              class="form-input"
+              placeholder="••••••••"
+            />
+            {% if form.password.errors %}
+            <p class="text-xs text-red-600 mt-1">{{ form.password.errors.0 }}</p>
+            {% endif %}
+          </div>
+
+          {% if redirect_field_value %}
+          <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
           {% endif %}
+
+          <button type="submit" class="submit-btn">
+            Entrar al Sistema
+          </button>
+        </form>
+
+        <div class="footer-text">
+          <p>🔒 Conexión segura con encriptación end-to-end</p>
+          <p style="margin-top: 0.75rem;">
+            Producto de Santiago Isbert Perlender &amp; Nicolás Daguerre<br>
+            para Ichtys Technology
+          </p>
         </div>
-
-        {% if redirect_field_value %}
-        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
-        {% endif %}
-
-        <button
-          type="submit"
-          class="submit-btn w-full text-white font-semibold py-3 px-4 rounded-xl transition-all text-sm mt-6 hover:shadow-lg hover:scale-105 transform">
-          <i data-lucide="arrow-right" class="h-4 w-4 inline mr-2"></i>
-          Entrar al Sistema
-        </button>
-      </form>
-    </div>
-
-    <div class="mt-6 text-center text-white/60 text-xs space-y-1">
-      <p>🔒 Conexión segura con encriptación</p>
-      <p class="text-white/40 text-xs mt-4">
-        Producto de Santiago Isbert Perlender &amp; Nicolás Daguerre para Ichtys Technology
-      </p>
-    </div>
-  </div>
-</div>
-
-<div id="cordoba-easter-egg" class="hidden fixed inset-0 z-50 items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
-  <div class="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl border border-slate-200 animate-slide-up">
-    <div class="flex items-start justify-between gap-4 mb-4">
-      <div>
-        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
-          <i data-lucide="sparkles" class="h-5 w-5 text-yellow-500"></i>
-          Mensaje especial
-        </h3>
       </div>
-      <button
-        type="button"
-        id="cordoba-easter-egg-close"
-        class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-700 transition-colors"
-        aria-label="Cerrar mensaje"
-      >
-        <i data-lucide="x" class="h-5 w-5"></i>
-      </button>
     </div>
-    <p class="mt-4 text-sm leading-7 text-slate-700">
-      📚 Para conocer sobre <span class="font-semibold text-primary-700">Ética &amp; Riesgos de la IA</span>, te invito a leer los libros de Santiago J. Isbert Perlender:
-    </p>
-    <div class="mt-4 space-y-2 bg-primary-50 rounded-lg p-4">
-      <p class="text-sm font-semibold text-primary-900">
-        🤖 <span class="text-primary-700">IA El último invento humano</span>
-      </p>
-      <p class="text-sm font-semibold text-primary-900">
-        💭 <span class="text-primary-700">El alma de la inteligencia</span>
-      </p>
-    </div>
-    <p class="mt-4 text-xs text-slate-600">
-      No te vas a arrepentir. ¡Gracias por tu apoyo!
-    </p>
   </div>
-</div>
 
-<script>
-  lucide.createIcons();
-
-  const easterEgg = document.getElementById('cordoba-easter-egg');
-  const easterEggTrigger = document.getElementById('cordoba-easter-egg-trigger');
-  const easterEggClose = document.getElementById('cordoba-easter-egg-close');
-
-  function showEasterEgg() {
-    easterEgg.classList.remove('hidden');
-    easterEgg.classList.add('flex');
-  }
-
-  function hideEasterEgg() {
-    easterEgg.classList.add('hidden');
-    easterEgg.classList.remove('flex');
-  }
-
-  easterEggTrigger.addEventListener('click', showEasterEgg);
-  easterEggClose.addEventListener('click', hideEasterEgg);
-  easterEgg.addEventListener('click', function (event) {
-    if (event.target === easterEgg) {
-      hideEasterEgg();
-    }
-  });
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') {
-      hideEasterEgg();
-    }
-  });
-</script>
+  <script>
+    lucide.createIcons();
+  </script>
 </body>
 </html>
