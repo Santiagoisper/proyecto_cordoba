@@ -265,7 +265,7 @@ def auditor_viaticos_dashboard(request):
         patients_with_summary.append({
             'patient': patient,
             'total_viaticos': total_viaticos,
-            'remaining': float(patient.viatic_cap) - total_viaticos,
+            'remaining': float(patient.viatic_cap) - float(total_viaticos),
             'percentage': percentage,
             'status': status,
         })

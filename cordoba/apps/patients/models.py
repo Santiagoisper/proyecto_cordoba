@@ -66,7 +66,7 @@ class Patient(models.Model):
         """Retorna el porcentaje de viáticos gastados respecto al tope."""
         if not self.viatic_cap or self.viatic_cap == 0:
             return 0
-        total = self.get_total_viaticos()
+        total = float(self.get_total_viaticos())
         return int((total / float(self.viatic_cap)) * 100)
 
     def get_viaticos_status(self):
