@@ -15,7 +15,7 @@
     }
 
     body {
-      background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0a2c48 100%);
+      background: #0a1e2e;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -24,37 +24,19 @@
       overflow: hidden;
     }
 
-    /* Fondo científico animado */
+    /* Fondo azul navy */
     .bg-scientific {
       position: absolute;
       inset: 0;
       z-index: 0;
-      overflow: hidden;
-    }
-
-    .dna-strand {
-      position: absolute;
-      opacity: 0.08;
-      font-size: 4rem;
-      color: white;
-      animation: float 6s ease-in-out infinite;
-    }
-
-    .dna-1 { top: 10%; left: 5%; animation-delay: 0s; }
-    .dna-2 { top: 60%; right: 8%; animation-delay: 1s; }
-    .dna-3 { top: 20%; right: 15%; animation-delay: 2s; }
-    .dna-4 { top: 70%; left: 12%; animation-delay: 1.5s; }
-
-    @keyframes float {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(20px); }
+      background: #0a1e2e;
     }
 
     .navbar {
       position: relative;
       z-index: 50;
-      background: linear-gradient(to right, #0c4a6e, rgba(12, 74, 110, 0.98));
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: #0a1e2e;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       padding: 1.5rem 2rem;
       display: flex;
       justify-content: space-between;
@@ -120,11 +102,12 @@
     }
 
     .header-title {
-      font-size: 2.5rem;
-      font-weight: 800;
+      font-size: 2rem;
+      font-weight: 700;
       color: white;
       margin-bottom: 1rem;
-      line-height: 1.2;
+      line-height: 1.3;
+      letter-spacing: -0.02em;
     }
 
     .header-title .highlight {
@@ -198,10 +181,12 @@
 
     .footer-text {
       text-align: center;
-      font-size: 0.8rem;
-      color: rgba(255, 255, 255, 0.6);
-      margin-top: 1.5rem;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.5);
+      margin-top: 2rem;
       line-height: 1.6;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .footer-text a {
@@ -215,12 +200,7 @@
   </style>
 </head>
 <body>
-  <div class="bg-scientific">
-    <div class="dna-strand dna-1">🧬</div>
-    <div class="dna-strand dna-2">🧪</div>
-    <div class="dna-strand dna-3">🔬</div>
-    <div class="dna-strand dna-4">🧬</div>
-  </div>
+  <div class="bg-scientific"></div>
 
   <!-- Navbar -->
   <nav class="navbar">
@@ -309,8 +289,7 @@
         <div class="footer-text">
           <p>🔒 Conexión segura con encriptación end-to-end</p>
           <p style="margin-top: 0.75rem;">
-            Producto de Santiago Isbert Perlender &amp; Nicolás Daguerre<br>
-            para Ichtys Technology
+            by Santiago J. Isbert Perlender (Ichtys Technology)
           </p>
         </div>
       </div>
