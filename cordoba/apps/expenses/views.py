@@ -36,8 +36,18 @@ def _get_client_ip(request):
 
 
 def _can_coordinate(user):
-    """True si el usuario puede aprobar/rechazar/observar gastos."""
+    """True si el usuario puede revisar gastos (ver lista de pendientes)."""
     return user.is_superuser or user.is_site_admin or user.is_coordinator
+
+
+def _can_review(user):
+    """True si el usuario puede REVISAR gastos (admin/site_admin, pero no aprobar)."""
+    return user.is_superuser or user.is_site_admin
+
+
+def _can_approve(user):
+    """True si el usuario puede APROBAR gastos (solo coordinadores)."""
+    return user.is_coordinator or user.is_site_admin or user.is_superuser
 
 
 def _can_work_reception(user):
@@ -596,9 +606,9 @@ def expense_correct(request, pk):
 @login_required
 @require_POST
 def approve_expense(request, pk):
-    """Aprueba un gasto. Solo coordinadores/admins. Retorna HTML parcial para HTMX."""
-    if not _can_coordinate(request.user):
-        return HttpResponseForbidden("No tenés permiso para aprobar gastos.")
+    """Aprueba un gasto. Solo coordinadores (no admin). Retorna HTML parcial para HTMX."""
+    if not _can_approve(request.user) or (request.user.is_superuser and not request.user.is_coordinator):
+        return HttpResponseForbidden("Solo los coordinadores pueden aprobar gastos.")
 
     expense = get_object_or_404(
         _site_scope_expenses(request.user, Expense.objects.select_related('period')),
@@ -629,6 +639,47 @@ def approve_expense(request, pk):
         'expense': expense,
         'action': 'approved',
         'action_label': 'Aprobado',
+    })
+
+
+@login_required
+@require_POST
+def send_to_coordinator(request, pk):
+    """Admin envía un gasto al coordinador (de pending_review a pending_coordinator). Solo admin."""
+    if not _can_review(request.user):
+        return HttpResponseForbidden("Solo admin puede enviar al coordinador.")
+
+    expense = get_object_or_404(
+        _site_scope_expenses(request.user, Expense.objects.select_related('period')),
+        pk=pk, status='pending_review',
+    )
+    lock_response = _period_locked_response(expense)
+    if lock_response:
+        return lock_response
+
+    prev_status = expense.status
+    notes = request.POST.get('notes', '').strip()
+
+    # Crear un estado intermedio o simplemente pasar a pending con nota
+    expense.reviewed_by = request.user
+    expense.reviewed_at = timezone.now()
+    expense.review_notes = f'[REVISADO POR ADMIN] {notes}' if notes else '[REVISADO POR ADMIN - Listo para coordinador]'
+    expense.save(update_fields=['reviewed_by', 'reviewed_at', 'review_notes'])
+
+    AuditLog.objects.create(
+        user=request.user,
+        action='sent_to_coordinator',
+        content_type='Expense',
+        object_id=expense.pk,
+        object_repr=str(expense),
+        details={'prev_status': prev_status, 'notes': notes},
+        ip_address=_get_client_ip(request),
+    )
+
+    return render(request, 'expenses/partials/expense_action_done.html', {
+        'expense': expense,
+        'action': 'sent_to_coordinator',
+        'action_label': 'Enviado al Coordinador',
     })
 
 

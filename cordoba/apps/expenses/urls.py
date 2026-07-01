@@ -18,6 +18,7 @@ urlpatterns = [
 
     # Coordinador — acciones HTMX
     path('<int:pk>/approve/', views.approve_expense, name='approve'),
+    path('<int:pk>/send-to-coordinator/', views.send_to_coordinator, name='send_to_coordinator'),
     path('<int:pk>/reject/', views.reject_expense, name='reject'),
     path('<int:pk>/observe/', views.observe_expense, name='observe'),
     path('<int:pk>/modal/<str:action>/', views.action_modal, name='action_modal'),
