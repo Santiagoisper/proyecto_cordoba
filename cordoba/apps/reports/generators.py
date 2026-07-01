@@ -128,15 +128,38 @@ def generate_patient_pdf(patient, period, requested_by) -> bytes:
 
     # Preparar datos de gastos con imagen base64
     expense_rows = []
+    tickets_with_images = []
+    total_viaticos_usd = Decimal('0')
+
     for exp in expenses:
         ticket = exp.ticket_files.first()
+        ticket_b64 = _ticket_to_base64(ticket)
         expense_rows.append({
             'expense': exp,
-            'ticket_b64': _ticket_to_base64(ticket),
+            'ticket_b64': ticket_b64,
             'ticket_filename': ticket.original_filename if ticket else '',
         })
 
+        # Acumular para viáticos y galería
+        total_viaticos_usd += exp.amount_usd or Decimal('0')
+        if ticket_b64:
+            tickets_with_images.append({
+                'ticket_b64': ticket_b64,
+                'date': exp.expense_date,
+                'vendor': exp.vendor,
+                'category': exp.get_category_display(),
+                'amount': exp.amount,
+                'currency': exp.currency,
+            })
+
     totals = _calc_totals(expenses)
+
+    # Calcular viáticos
+    remaining_viaticos = Decimal('0')
+    percentage_used = 0
+    if patient.viatic_cap:
+        remaining_viaticos = patient.viatic_cap - total_viaticos_usd
+        percentage_used = int((total_viaticos_usd / patient.viatic_cap) * 100)
 
     context = {
         'patient': patient,
@@ -144,6 +167,10 @@ def generate_patient_pdf(patient, period, requested_by) -> bytes:
         'protocol': patient.protocol,
         'expenses': expense_rows,
         'totals': totals,
+        'total_viaticos_usd': total_viaticos_usd,
+        'remaining_viaticos': remaining_viaticos,
+        'percentage_used': percentage_used,
+        'tickets_with_images': tickets_with_images,
         'generated_by': requested_by,
         'generated_at': timezone.now(),
         'report_type': 'patient',

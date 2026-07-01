@@ -52,6 +52,25 @@
     .totals-table td:last-child { text-align: right; font-family: monospace; font-weight: bold; }
     .totals-table .grand-total td { background: #1E3A8A; color: white; font-weight: bold; }
 
+    /* Viaticos box */
+    .viaticos-box { background: #F0F9FF; border: 2px solid #0EA5E9; border-radius: 4pt; padding: 10pt; margin-bottom: 14pt; font-size: 9pt; }
+    .viaticos-box .title { font-weight: bold; color: #0369A1; font-size: 10pt; margin-bottom: 4pt; }
+    .viaticos-row { display: table; width: 100%; margin-bottom: 4pt; }
+    .viaticos-label { display: table-cell; width: 50%; }
+    .viaticos-value { display: table-cell; text-align: right; font-weight: bold; font-family: monospace; }
+    .viaticos-progress { background: #E0F2FE; border-radius: 3pt; height: 12pt; overflow: hidden; margin: 6pt 0; }
+    .viaticos-bar { background: #0EA5E9; height: 100%; transition: width 0.3s; }
+    .viaticos-bar.warning { background: #F59E0B; }
+    .viaticos-bar.danger { background: #EF4444; }
+
+    /* Tickets gallery */
+    .tickets-gallery { margin-top: 14pt; page-break-before: always; padding-top: 10pt; }
+    .gallery-title { font-size: 12pt; font-weight: bold; color: #1E3A8A; margin-bottom: 10pt; border-bottom: 2px solid #1E3A8A; padding-bottom: 6pt; }
+    .gallery-grid { display: table; width: 100%; border-collapse: collapse; }
+    .gallery-item { display: table-cell; width: 50%; vertical-align: top; padding: 8pt; }
+    .gallery-item img { width: 95%; border: 1px solid #CBD5E1; border-radius: 4pt; }
+    .gallery-item-label { font-size: 7pt; color: #64748B; margin-top: 4pt; text-align: center; }
+
     /* Footer */
     .footer { margin-top: 20pt; border-top: 1px solid #E2E8F0; padding-top: 8pt; font-size: 8pt; color: #94A3B8; }
   </style>
@@ -86,6 +105,31 @@
     <tr><td>Código de paciente</td><td><strong>{{ patient.patient_code }}</strong></td></tr>
     <tr><td>Período</td><td>{{ period.name }} ({{ period.date_from|date:"d/m/Y" }} — {{ period.date_to|date:"d/m/Y" }})</td></tr>
   </table>
+
+  <!-- Información de viáticos -->
+  {% if patient.viatic_cap %}
+  <div class="viaticos-box">
+    <div class="title">💰 Resumen de Viáticos</div>
+    <div class="viaticos-row">
+      <div class="viaticos-label">Tope asignado:</div>
+      <div class="viaticos-value">USD {% if patient.viatic_cap %}{{ patient.viatic_cap|floatformat:2 }}{% else %}—{% endif %}</div>
+    </div>
+    <div class="viaticos-row">
+      <div class="viaticos-label">Monto ejecutado:</div>
+      <div class="viaticos-value">USD {{ total_viaticos_usd|default:"0.00"|floatformat:2 }}</div>
+    </div>
+    <div class="viaticos-row">
+      <div class="viaticos-label">Disponible:</div>
+      <div class="viaticos-value">USD {{ remaining_viaticos|default:"0.00"|floatformat:2 }}</div>
+    </div>
+    {% if percentage_used %}
+    <div class="viaticos-progress">
+      <div class="viaticos-bar {% if percentage_used >= 100 %}danger{% elif percentage_used > 80 %}warning{% endif %}" style="width: {{ percentage_used|default:"0" }}%;"></div>
+    </div>
+    <div style="text-align:right;font-size:8pt;color:#64748B;">{{ percentage_used|default:"0"|floatformat:0 }}% utilizado</div>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <!-- Gastos -->
   <div class="section-title">Detalle de gastos aprobados</div>
@@ -152,6 +196,26 @@
       <td>${{ totals.total|ars }}</td>
     </tr>
   </table>
+
+  <!-- Anexo: Galería de tickets -->
+  {% if tickets_with_images %}
+  <div class="tickets-gallery">
+    <div class="gallery-title">📎 ANEXO A: Fotos de Tickets</div>
+    <div class="gallery-grid">
+      {% for item in tickets_with_images %}
+      {% if item.ticket_b64 %}
+      <div class="gallery-item">
+        <img src="{{ item.ticket_b64 }}" alt="Ticket {{ item.date }}" />
+        <div class="gallery-item-label">
+          {{ item.date|date:"d/m/Y" }} — {{ item.vendor|truncatewords:3 }}<br>
+          {{ item.category|upper }} — ${{ item.amount|ars }} {{ item.currency }}
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Footer con número de página (xhtml2pdf: -pdf-frame-content) -->
   <div style="-pdf-frame-content: footer_frame; text-align: center; font-size: 8pt; color: #94A3B8;">
