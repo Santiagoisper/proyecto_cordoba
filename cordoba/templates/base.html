@@ -185,7 +185,7 @@
         {% if user.is_coordinator or user.is_site_admin or user.is_superuser %}
         <div class="pt-4 mt-2 border-t border-slate-200">
           <p class="px-3 pb-2 text-xs font-bold text-primary-700 uppercase tracking-wider">✅ Coordinación</p>
-          <a href="{% url 'dashboard:index' %}" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors border-l-2 border-transparent hover:border-primary-600">
+          <a href="{% url 'expenses:list' %}" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors border-l-2 border-transparent hover:border-primary-600">
             <i data-lucide="check-circle-2" class="h-4 w-4 shrink-0"></i><span>Aprobar gastos</span>
           </a>
           <a href="{% url 'periods:list' %}" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors border-l-2 border-transparent hover:border-primary-600">
