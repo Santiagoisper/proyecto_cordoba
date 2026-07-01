@@ -68,6 +68,87 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 
   {% block extra_head %}{% endblock %}
+
+  <style>
+    /* Tema Noche */
+    html.dark {
+      background: #0a1e2e;
+    }
+
+    html.dark body {
+      background: #0a1e2e;
+      color: rgba(255, 255, 255, 0.95);
+    }
+
+    html.dark .bg-slate-50,
+    html.dark .bg-white {
+      background: #0f2438;
+    }
+
+    html.dark .bg-slate-100 {
+      background: #1a3447;
+    }
+
+    html.dark .text-slate-900,
+    html.dark .text-slate-800,
+    html.dark .text-slate-700 {
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    html.dark .text-slate-600 {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    html.dark .text-slate-500 {
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    html.dark .border-slate-200 {
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    html.dark .border-slate-100 {
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    html.dark .bg-primary-50 {
+      background: rgba(3, 105, 161, 0.15);
+    }
+
+    html.dark .hover\:bg-primary-50:hover {
+      background: rgba(3, 105, 161, 0.2);
+    }
+
+    html.dark .hover\:bg-slate-100:hover {
+      background: #1a3447;
+    }
+
+    html.dark .shadow-sm {
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    }
+
+    html.dark .rounded-lg {
+      background: #0f2438 !important;
+    }
+
+    html.dark input,
+    html.dark textarea,
+    html.dark select {
+      background: #1a3447;
+      color: rgba(255, 255, 255, 0.95);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    html.dark input::placeholder,
+    html.dark textarea::placeholder {
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    html.dark .card,
+    html.dark .divide-slate-200 > * + * {
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+  </style>
 </head>
 
 <body class="h-full">
@@ -225,6 +306,18 @@
           <a href="/admin/" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors">
             <i data-lucide="wrench" class="h-4 w-4 shrink-0"></i><span>Admin Django</span>
           </a>
+
+          <!-- Tema Día/Noche -->
+          <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium">
+            <i data-lucide="moon" class="h-4 w-4 shrink-0 text-slate-500"></i>
+            <label class="flex items-center cursor-pointer">
+              <input type="checkbox" id="theme-toggle" class="sr-only" onchange="toggleTheme()">
+              <div class="relative w-10 h-5 bg-slate-300 rounded-full transition-colors" id="theme-toggle-bg">
+                <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-300" id="theme-toggle-circle"></div>
+              </div>
+            </label>
+            <i data-lucide="sun" class="h-4 w-4 shrink-0 text-slate-500"></i>
+          </div>
         </div>
         {% endif %}
 
@@ -329,6 +422,53 @@
       </div>
     </div>
   </footer>
+
+  <script>
+    // Inicializar tema desde localStorage
+    function initTheme() {
+      const isDark = localStorage.getItem('theme') === 'dark';
+      const toggle = document.getElementById('theme-toggle');
+      const toggleBg = document.getElementById('theme-toggle-bg');
+      const toggleCircle = document.getElementById('theme-toggle-circle');
+
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+        if (toggle) toggle.checked = true;
+        if (toggleBg) toggleBg.classList.add('bg-primary-600');
+        if (toggleCircle) toggleCircle.classList.add('translate-x-5');
+      } else {
+        document.documentElement.classList.remove('dark');
+        if (toggle) toggle.checked = false;
+        if (toggleBg) toggleBg.classList.remove('bg-primary-600');
+        if (toggleCircle) toggleCircle.classList.remove('translate-x-5');
+      }
+    }
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      const isDark = html.classList.toggle('dark');
+      const toggleBg = document.getElementById('theme-toggle-bg');
+      const toggleCircle = document.getElementById('theme-toggle-circle');
+
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+
+      if (isDark) {
+        toggleBg?.classList.add('bg-primary-600');
+        toggleCircle?.classList.add('translate-x-5');
+      } else {
+        toggleBg?.classList.remove('bg-primary-600');
+        toggleCircle?.classList.remove('translate-x-5');
+      }
+    }
+
+    // Inicializar tema al cargar la página
+    document.addEventListener('DOMContentLoaded', initTheme);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initTheme);
+    } else {
+      initTheme();
+    }
+  </script>
 
 </body>
 </html>
