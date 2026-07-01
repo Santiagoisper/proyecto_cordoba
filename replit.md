@@ -9,6 +9,10 @@ Sistema web de gestión de viáticos para pacientes de ensayos clínicos. Asiste
 - `cd cordoba && python manage.py makemigrations` — generar nuevas migraciones
 - `cd cordoba && python manage.py createsuperuser` — crear superusuario
 - `cd cordoba && python manage.py shell` — shell interactivo de Django
+- `powershell -ExecutionPolicy Bypass -File scripts\prepare-client-demo.ps1` — validar y migrar antes de demo
+- `powershell -ExecutionPolicy Bypass -File scripts\seed-client-demo.ps1` — crear/resetear datos y usuarios de demo
+- `powershell -ExecutionPolicy Bypass -File scripts\start-client-demo.ps1` — levantar demo local en `localhost:8000`
+- `powershell -ExecutionPolicy Bypass -File scripts\start-client-demo-tunnel.ps1` — abrir URL pública temporal con ngrok
 
 ## Stack
 

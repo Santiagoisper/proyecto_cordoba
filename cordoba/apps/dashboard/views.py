@@ -222,6 +222,109 @@ def export_visits_csv(request):
         'cargado': 'Cargado',
     }
 
+
+@login_required
+def auditor_viaticos_dashboard(request):
+    """Dashboard del auditor: gestión de topes y tracking de viáticos por paciente."""
+    user = request.user
+    if not (user.is_superuser or user.is_site_admin or user.is_auditor):
+        return HttpResponseForbidden("No tenés acceso a esta página")
+
+    from apps.patients.models import Patient
+    from apps.protocols.models import Protocol
+    from django.db.models import Sum
+
+    # Filtros
+    protocol_id = request.GET.get('protocol_id')
+    search_query = request.GET.get('search', '').strip()
+
+    # Queryset base
+    patients_qs = Patient.objects.select_related('protocol').filter(is_active=True)
+
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        patients_qs = patients_qs.filter(protocol__site_id=user.site_id)
+
+    if protocol_id:
+        patients_qs = patients_qs.filter(protocol_id=protocol_id)
+
+    if search_query:
+        patients_qs = patients_qs.filter(
+            Q(patient_code__icontains=search_query) | Q(initials__icontains=search_query)
+        )
+
+    # Anotar con totales
+    from django.db.models import DecimalField
+    from apps.expenses.models import Expense
+
+    patients_with_summary = []
+    for patient in patients_qs.order_by('protocol__code', 'patient_code'):
+        total_viaticos = patient.get_total_viaticos()
+        percentage = patient.get_viaticos_percentage()
+        status = patient.get_viaticos_status()
+
+        patients_with_summary.append({
+            'patient': patient,
+            'total_viaticos': total_viaticos,
+            'remaining': float(patient.viatic_cap) - total_viaticos,
+            'percentage': percentage,
+            'status': status,
+        })
+
+    protocols = Protocol.objects.filter(is_active=True).order_by('code')
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        protocols = protocols.filter(site_id=user.site_id)
+
+    return render(request, 'dashboard/auditor_viaticos.html', {
+        'patients_with_summary': patients_with_summary,
+        'protocols': protocols,
+        'selected_protocol_id': int(protocol_id) if protocol_id else None,
+        'search_query': search_query,
+        'total_patients': len(patients_with_summary),
+    })
+
+
+@login_required
+def update_patient_viatic_cap(request, patient_id):
+    """Actualiza el tope de viáticos de un paciente (POST)."""
+    from apps.patients.models import Patient
+
+    if request.method != 'POST':
+        return HttpResponseForbidden()
+
+    user = request.user
+    if not (user.is_superuser or user.is_site_admin or user.is_auditor):
+        return HttpResponseForbidden()
+
+    patient = Patient.objects.select_related('protocol').get(pk=patient_id)
+
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        if patient.protocol.site_id != user.site_id:
+            return HttpResponseForbidden()
+
+    new_cap = request.POST.get('viatic_cap', '').strip()
+    if not new_cap:
+        return HttpResponse('El tope no puede estar vacío', status=400)
+
+    try:
+        patient.viatic_cap = float(new_cap)
+        patient.save()
+
+        # Log audit
+        from apps.expenses.models import AuditLog
+        AuditLog.objects.create(
+            user=user,
+            action='updated',
+            content_type='Patient',
+            object_id=patient.pk,
+            object_repr=str(patient),
+            details={'field': 'viatic_cap', 'new_value': str(new_cap)},
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+
+        return HttpResponse(f'Tope actualizado a ${new_cap}', status=200)
+    except ValueError:
+        return HttpResponse('Tope inválido', status=400)
+
     rows = []
     for v in visits_qs:
         if v.total_expenses == 0:

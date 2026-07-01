@@ -96,15 +96,18 @@
   <td class="px-4 py-3">
     <div class="flex items-center justify-end gap-1.5">
 
-      <!-- Aprobar (directo, sin modal) -->
-      <button
-        hx-post="{% url 'expenses:approve' item.expense.pk %}"
-        hx-target="#expense-row-{{ item.expense.pk }}"
-        hx-swap="outerHTML"
-        hx-confirm="¿Aprobar el gasto de ${{ item.expense.amount|ars }} ({{ item.expense.get_category_display }})?"
-        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-green-600 hover:bg-green-700 text-white transition-colors">
-        <i data-lucide="check" class="h-3.5 w-3.5"></i> Aprobar
-      </button>
+      <!-- Aprobar (con formulario y CSRF) -->
+      <form method="post"
+            action="{% url 'expenses:approve' item.expense.pk %}"
+            style="display:inline;">
+        {% csrf_token %}
+        <button
+          type="submit"
+          onclick="return confirm('¿Aprobar el gasto de ${{ item.expense.amount|ars }} ({{ item.expense.get_category_display }})?')"
+          class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-green-600 hover:bg-green-700 text-white transition-colors">
+          <i data-lucide="check" class="h-3.5 w-3.5"></i> Aprobar
+        </button>
+      </form>
 
       <!-- Rechazar (abre modal) -->
       <button

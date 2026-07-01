@@ -24,6 +24,13 @@ class Patient(models.Model):
     is_active = models.BooleanField(default=True)
     enrolled_date = models.DateField(null=True, blank=True)
 
+    viatic_cap = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=10000,
+        help_text="Tope máximo de viáticos que pagan los laboratorios para este paciente"
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL, null=True,
@@ -42,6 +49,38 @@ class Patient(models.Model):
 
     def __str__(self):
         return f"{self.protocol.code} / {self.patient_code}"
+
+    def get_total_viaticos(self):
+        """Retorna el total de viáticos aprobados para este paciente."""
+        from django.db.models import Sum
+        from apps.expenses.models import Expense
+
+        total = Expense.objects.filter(
+            visit__patient=self,
+            status__in=['approved', 'settled', 'exported']
+        ).aggregate(total=Sum('amount_usd'))['total'] or 0
+
+        return total
+
+    def get_viaticos_percentage(self):
+        """Retorna el porcentaje de viáticos gastados respecto al tope."""
+        if not self.viatic_cap or self.viatic_cap == 0:
+            return 0
+        total = self.get_total_viaticos()
+        return int((total / float(self.viatic_cap)) * 100)
+
+    def get_viaticos_status(self):
+        """Retorna el estado: 'ok', 'warning' (>80%), 'danger' (>=100%)."""
+        percentage = self.get_viaticos_percentage()
+        if percentage >= 100:
+            return 'danger'
+        elif percentage > 80:
+            return 'warning'
+        return 'ok'
+
+    def is_viaticos_exceeded(self):
+        """True si se ha excedido el tope de viáticos."""
+        return self.get_total_viaticos() >= float(self.viatic_cap)
 
 
 class Visit(models.Model):

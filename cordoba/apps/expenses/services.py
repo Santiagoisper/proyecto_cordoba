@@ -88,6 +88,57 @@ class OCRService:
         response.raise_for_status()
         return self._parse_veryfi_response(response.json())
 
+    def _normalize_amount(self, amount_str: str) -> str:
+        """
+        Normaliza números en formato argentino o americano a formato Python.
+        - Argentino: 40.200,50 → 40200.50 (punto=miles, coma=decimal)
+        - Americano: 40,200.50 → 40200.50 (coma=miles, punto=decimal)
+        - Sin separadores: 40 → 40
+        - Veryfi corrupto: 40.200 → 40200 (detecta que es miles, no decimal)
+
+        Detecta automáticamente basado en la cantidad de dígitos después del separador.
+        Si hay 3 dígitos después del último separador → es separador de miles (siempre).
+        Si hay ≤2 dígitos → es separador decimal.
+        """
+        # Remover espacios
+        amount_str = amount_str.strip()
+
+        # Si no tiene separadores, devolver como está
+        if ',' not in amount_str and '.' not in amount_str:
+            return amount_str
+
+        # Contar dígitos después del último separador
+        last_sep_idx = max(amount_str.rfind(','), amount_str.rfind('.'))
+        if last_sep_idx == -1:
+            return amount_str
+
+        digits_after_sep = sum(1 for c in amount_str[last_sep_idx+1:] if c.isdigit())
+        last_sep = amount_str[last_sep_idx]
+
+        # Si hay exactamente 3 dígitos después del último separador → es separador de miles
+        # Ej: 40.200 o 1,000 o 1000 siempre tiene 3 dígitos de miles
+        if digits_after_sep == 3:
+            # Es separador de miles: remover todos los separadores de miles
+            normalized = amount_str.replace(last_sep, '').replace('.', '').replace(',', '')
+            # Si quedó un decimal, protegerlo
+            if '.' not in normalized:
+                return normalized
+            return normalized
+
+        # Si ≤2 dígitos después del último separador → es decimal
+        if digits_after_sep <= 2:
+            # El último separador es el decimal, todos los otros son miles
+            if last_sep == ',':
+                # Argentino: 40.200,50 → 40200.50
+                normalized = amount_str.replace('.', '').replace(',', '.')
+                return normalized
+            elif last_sep == '.':
+                # Americano: 40,200.50 → 40200.50
+                normalized = amount_str.replace(',', '')
+                return normalized
+
+        return amount_str
+
     def _build_headers(self, payload_str: str) -> dict:
         timestamp = int(datetime.now().timestamp() * 1000)
         signature_data = f'timestamp:{timestamp}'
@@ -112,7 +163,11 @@ class OCRService:
         total = data.get('total')
         if total is not None:
             try:
-                result.amount = Decimal(str(total))
+                # Normalizar número: detectar si es formato argentino (punto=miles, coma=decimal)
+                # o formato americano (punto=decimal, coma=miles)
+                total_str = str(total).strip()
+                normalized = self._normalize_amount(total_str)
+                result.amount = Decimal(normalized)
                 result.confidence_amount = 0.9
             except InvalidOperation:
                 pass

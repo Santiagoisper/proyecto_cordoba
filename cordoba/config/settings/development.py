@@ -12,7 +12,7 @@ ALLOWED_HOSTS = ['*']
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
-environ.Env.read_env(BASE_DIR / '.env', overwrite=True)
+environ.Env.read_env(BASE_DIR / '.env', overwrite=False)
 
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-dev-key-change-in-production-xyz123')
 
@@ -22,5 +22,5 @@ DATABASES = {
 
 CSRF_TRUSTED_ORIGINS = env.list(
     'CSRF_TRUSTED_ORIGINS',
-    default=['https://*.replit.dev', 'https://*.repl.co', 'https://*.replit.app']
+    default=['https://*.replit.dev', 'https://*.repl.co', 'https://*.replit.app', 'https://*.trycloudflare.com', 'https://*.ngrok-free.app']
 )

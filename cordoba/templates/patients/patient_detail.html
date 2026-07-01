@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}{{ patient }} — Proyecto Córdoba{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  <div class="mb-6">
+    <a href="/" class="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-sm mb-4">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>Volver
+    </a>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900">{{ patient.patient_code }}</h1>
+        <p class="text-slate-500 text-sm mt-1">{{ patient.protocol }}</p>
+      </div>
+      <div class="flex gap-2">
+        <a href="{% url 'patients:patient_edit' patient.pk %}" class="inline-flex items-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
+          <i data-lucide="edit" class="h-4 w-4"></i>
+          Editar
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info del paciente -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-semibold text-slate-900 mb-4">Información del paciente</h2>
+    <dl class="grid grid-cols-2 gap-4 text-sm">
+      <div>
+        <dt class="font-medium text-slate-700">Código</dt>
+        <dd class="text-slate-600">{{ patient.patient_code }}</dd>
+      </div>
+      <div>
+        <dt class="font-medium text-slate-700">Iniciales</dt>
+        <dd class="text-slate-600">{{ patient.initials|default:"—" }}</dd>
+      </div>
+      <div>
+        <dt class="font-medium text-slate-700">Protocolo</dt>
+        <dd class="text-slate-600">{{ patient.protocol.code }}</dd>
+      </div>
+      <div>
+        <dt class="font-medium text-slate-700">Fecha de enrolamiento</dt>
+        <dd class="text-slate-600">{{ patient.enrolled_date|date:"d/m/Y"|default:"—" }}</dd>
+      </div>
+      <div>
+        <dt class="font-medium text-slate-700">Estado</dt>
+        <dd class="text-slate-600">{% if patient.is_active %}<span class="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded"><i data-lucide="check-circle-2" class="h-3 w-3"></i>Activo</span>{% else %}<span class="inline-flex items-center gap-1 text-slate-500 bg-slate-100 px-2 py-1 rounded"><i data-lucide="circle" class="h-3 w-3"></i>Inactivo</span>{% endif %}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Visitas -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-slate-900">Visitas</h2>
+      {% if user.is_superuser or user.is_site_admin or user.is_coordinator %}
+      <a href="{% url 'patients:visit_create' patient.pk %}" class="inline-flex items-center gap-2 bg-primary-700 hover:bg-primary-800 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
+        <i data-lucide="plus" class="h-4 w-4"></i>
+        Agregar visita
+      </a>
+      {% endif %}
+    </div>
+
+    {% if visits %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50">
+            <th class="text-left px-4 py-3 font-semibold text-slate-700">Tipo de visita</th>
+            <th class="text-left px-4 py-3 font-semibold text-slate-700">Fecha programada</th>
+            <th class="text-left px-4 py-3 font-semibold text-slate-700">Fecha real</th>
+            <th class="text-left px-4 py-3 font-semibold text-slate-700">Estado</th>
+            <th class="text-left px-4 py-3 font-semibold text-slate-700">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for visit in visits %}
+          <tr class="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+            <td class="px-4 py-3">{{ visit.visit_type.name }}</td>
+            <td class="px-4 py-3">{{ visit.scheduled_date|date:"d/m/Y" }}</td>
+            <td class="px-4 py-3">{{ visit.actual_date|date:"d/m/Y"|default:"—" }}</td>
+            <td class="px-4 py-3">
+              {% if visit.status == 'scheduled' %}
+              <span class="inline-flex items-center gap-1 text-blue-700 bg-blue-50 px-2 py-1 rounded text-xs">
+                <i data-lucide="calendar" class="h-3 w-3"></i>Programada
+              </span>
+              {% elif visit.status == 'completed' %}
+              <span class="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded text-xs">
+                <i data-lucide="check-circle-2" class="h-3 w-3"></i>Realizada
+              </span>
+              {% elif visit.status == 'cancelled' %}
+              <span class="inline-flex items-center gap-1 text-red-700 bg-red-50 px-2 py-1 rounded text-xs">
+                <i data-lucide="x-circle" class="h-3 w-3"></i>Cancelada
+              </span>
+              {% elif visit.status == 'missed' %}
+              <span class="inline-flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded text-xs">
+                <i data-lucide="alert-circle" class="h-3 w-3"></i>No asistió
+              </span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3">
+              {% if user.is_superuser or user.is_site_admin or user.is_coordinator %}
+              <a href="{% url 'patients:visit_edit' visit.pk %}" class="text-primary-600 hover:text-primary-800 font-medium text-sm">
+                Editar
+              </a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8">
+      <i data-lucide="calendar-x" class="h-12 w-12 text-slate-300 mx-auto mb-2"></i>
+      <p class="text-slate-500 text-sm">No hay visitas registradas</p>
+      {% if user.is_superuser or user.is_site_admin or user.is_coordinator %}
+      <a href="{% url 'patients:visit_create' patient.pk %}" class="text-primary-600 hover:text-primary-800 font-medium text-sm inline-flex items-center gap-1 mt-2">
+        <i data-lucide="plus" class="h-4 w-4"></i>Crear primera visita
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -31,7 +31,14 @@
       <div class="inline-flex items-center justify-center w-14 h-14 bg-primary-800 rounded-2xl mb-4 shadow-lg">
         <i data-lucide="shield-check" class="h-7 w-7 text-white"></i>
       </div>
-      <h1 class="text-2xl font-bold text-slate-900">Proyecto Córdoba</h1>
+      <h1 class="text-2xl font-bold text-slate-900">
+        Proyecto C<button
+          type="button"
+          id="cordoba-easter-egg-trigger"
+          class="font-bold text-slate-900 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-700 focus:ring-offset-2 rounded-sm"
+          aria-label="Abrir mensaje especial"
+        >ó</button>rdoba
+      </h1>
       <p class="text-slate-500 text-sm mt-1">Sistema de viáticos clínicos</p>
     </div>
 
@@ -99,11 +106,63 @@
     </div>
 
     <p class="text-center text-xs text-slate-400 mt-6">
-      CINME / Innova Trials &nbsp;·&nbsp; Uso exclusivo del personal autorizado
+      Producto de Santiago Isbert Perlender &amp; Nicolás Daguerre para Ichtys Technology
     </p>
   </div>
 </div>
 
-<script>lucide.createIcons();</script>
+<div id="cordoba-easter-egg" class="hidden fixed inset-0 z-50 items-center justify-center bg-slate-950/60 px-4">
+  <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+    <div class="flex items-start justify-between gap-4">
+      <h3 class="text-lg font-semibold text-slate-900">Mensaje especial</h3>
+      <button
+        type="button"
+        id="cordoba-easter-egg-close"
+        class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-700"
+        aria-label="Cerrar mensaje"
+      >
+        <i data-lucide="x" class="h-5 w-5"></i>
+      </button>
+    </div>
+    <p class="mt-4 text-sm leading-6 text-slate-700">
+      Para conocer sobre Ética &amp; Riesgos de la IA. Compra los libros de Santiago J. Isbert Perlender:
+      <span class="font-semibold text-slate-900">IA El último invento humano</span>
+      &amp;
+      <span class="font-semibold text-slate-900">El alma de la inteligencia</span>.
+      No te vas a arrepentir. Gracias.
+    </p>
+  </div>
+</div>
+
+<script>
+  lucide.createIcons();
+
+  const easterEgg = document.getElementById('cordoba-easter-egg');
+  const easterEggTrigger = document.getElementById('cordoba-easter-egg-trigger');
+  const easterEggClose = document.getElementById('cordoba-easter-egg-close');
+
+  function showEasterEgg() {
+    easterEgg.classList.remove('hidden');
+    easterEgg.classList.add('flex');
+  }
+
+  function hideEasterEgg() {
+    easterEgg.classList.add('hidden');
+    easterEgg.classList.remove('flex');
+  }
+
+  easterEggTrigger.addEventListener('click', showEasterEgg);
+  easterEggClose.addEventListener('click', hideEasterEgg);
+  easterEgg.addEventListener('click', function (event) {
+    if (event.target === easterEgg) {
+      hideEasterEgg();
+    }
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      hideEasterEgg();
+    }
+  });
+</script>
 </body>
 </html>
