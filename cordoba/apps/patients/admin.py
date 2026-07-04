@@ -11,11 +11,20 @@ class VisitInline(admin.TabularInline):
 
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
-    list_display = ['patient_code', 'initials', 'protocol', 'is_active', 'enrolled_date', 'created_at']
+    list_display = [
+        'patient_code', 'initials', 'protocol', 'is_active', 'enrolled_date',
+        'viatic_cap', 'total_viaticos', 'created_at',
+    ]
     list_filter = ['protocol', 'is_active']
     search_fields = ['patient_code', 'initials', 'protocol__code']
     readonly_fields = ['created_at', 'created_by']
+    list_select_related = ['protocol']
+    autocomplete_fields = ['protocol']
     inlines = [VisitInline]
+
+    @admin.display(description='Viáticos ejecutados (USD)')
+    def total_viaticos(self, obj):
+        return obj.get_total_viaticos()
     fieldsets = (
         ('Identificación', {
             'fields': ('protocol', 'patient_code', 'initials', 'is_active', 'enrolled_date'),
@@ -42,6 +51,9 @@ class VisitAdmin(admin.ModelAdmin):
     list_display = ['patient', 'visit_type', 'scheduled_date', 'actual_date', 'status']
     list_filter = ['status', 'patient__protocol', 'visit_type']
     search_fields = ['patient__patient_code', 'visit_type__name']
+    date_hierarchy = 'scheduled_date'
+    list_select_related = ['patient__protocol', 'visit_type']
+    autocomplete_fields = ['patient']
     readonly_fields = ['created_at', 'created_by']
     fieldsets = (
         ('Visita', {

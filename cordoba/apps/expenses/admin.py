@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import (
     Expense,
     ExpensePeriod,
@@ -13,11 +14,31 @@ def _all_model_fields(model):
     return [field.name for field in model._meta.fields]
 
 
+def _file_preview(file_field, mime_type=''):
+    """Miniatura clickeable del comprobante (o link si es PDF)."""
+    if not file_field:
+        return '—'
+    if 'pdf' in (mime_type or ''):
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">📄 Ver PDF</a>', file_field.url
+        )
+    return format_html(
+        '<a href="{0}" target="_blank" rel="noopener">'
+        '<img src="{0}" style="max-height:80px;max-width:120px;'
+        'border:1px solid #cbd5e1;border-radius:4px;" /></a>',
+        file_field.url,
+    )
+
+
 class TicketFileInline(admin.TabularInline):
     model = TicketFile
     extra = 0
-    readonly_fields = ['uploaded_at', 'uploaded_by', 'ocr_status', 'file_size', 'mime_type']
-    fields = ['file', 'original_filename', 'ocr_status', 'uploaded_by', 'uploaded_at']
+    readonly_fields = ['preview', 'uploaded_at', 'uploaded_by', 'ocr_status', 'file_size', 'mime_type']
+    fields = ['preview', 'file', 'original_filename', 'ocr_status', 'uploaded_by', 'uploaded_at']
+
+    @admin.display(description='Vista previa')
+    def preview(self, obj):
+        return _file_preview(obj.file, obj.mime_type)
 
 
 @admin.register(ExpensePeriod)
@@ -55,8 +76,8 @@ class ExpensePeriodAdmin(admin.ModelAdmin):
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'visit', 'category', 'amount', 'currency', 'amount_usd',
-        'expense_date', 'status', 'submitted_by', 'created_at'
+        'id', 'protocol_code', 'patient_code', 'visit_name', 'category',
+        'amount', 'currency', 'amount_usd', 'expense_date', 'status', 'submitted_by',
     ]
     list_filter = ['status', 'category', 'currency', 'visit__patient__protocol']
     search_fields = [
@@ -64,6 +85,22 @@ class ExpenseAdmin(admin.ModelAdmin):
         'visit__patient__protocol__code',
         'vendor', 'description'
     ]
+    date_hierarchy = 'expense_date'
+    list_per_page = 50
+    list_select_related = ['visit__patient__protocol', 'visit__visit_type', 'submitted_by']
+    autocomplete_fields = ['visit', 'period']
+
+    @admin.display(description='Protocolo', ordering='visit__patient__protocol__code')
+    def protocol_code(self, obj):
+        return obj.visit.patient.protocol.code
+
+    @admin.display(description='Paciente', ordering='visit__patient__patient_code')
+    def patient_code(self, obj):
+        return obj.visit.patient.patient_code
+
+    @admin.display(description='Visita', ordering='visit__visit_type__order')
+    def visit_name(self, obj):
+        return obj.visit.visit_type.name
     readonly_fields = [
         'created_at', 'updated_at', 'submitted_by',
         'reviewed_by', 'reviewed_at', 'ocr_raw_data', 'ocr_confidence', 'ocr_processed_at'
@@ -128,12 +165,12 @@ class TicketFileAdmin(admin.ModelAdmin):
         'original_filename',
     ]
     readonly_fields = [
-        'uploaded_at', 'uploaded_by', 'file_size', 'mime_type',
+        'preview', 'uploaded_at', 'uploaded_by', 'file_size', 'mime_type',
         'ocr_task_id', 'ocr_status',
     ]
     fieldsets = (
         ('Archivo', {
-            'fields': ('expense', 'file', 'original_filename', 'file_size', 'mime_type')
+            'fields': ('preview', 'expense', 'file', 'original_filename', 'file_size', 'mime_type')
         }),
         ('OCR', {
             'fields': ('ocr_status', 'ocr_task_id'),
@@ -144,6 +181,10 @@ class TicketFileAdmin(admin.ModelAdmin):
         }),
     )
 
+    @admin.display(description='Vista previa')
+    def preview(self, obj):
+        return _file_preview(obj.file, obj.mime_type)
+
     def has_change_permission(self, request, obj=None):
         return False
 
@@ -153,10 +194,15 @@ class ReceptionTicketAdmin(admin.ModelAdmin):
     list_display = ['id', 'status', 'site', 'original_filename', 'uploaded_by', 'uploaded_at', 'assigned_expense']
     list_filter = ['status', 'site', 'mime_type']
     search_fields = ['original_filename', 'notes', 'assigned_expense__visit__patient__patient_code']
+    date_hierarchy = 'uploaded_at'
     readonly_fields = [
-        'uploaded_at', 'uploaded_by', 'file_size', 'mime_type',
+        'preview', 'uploaded_at', 'uploaded_by', 'file_size', 'mime_type',
         'assigned_expense', 'assigned_by', 'assigned_at',
     ]
+
+    @admin.display(description='Vista previa')
+    def preview(self, obj):
+        return _file_preview(obj.file, obj.mime_type)
 
 
 @admin.register(AuditLog)

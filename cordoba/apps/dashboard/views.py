@@ -1,4 +1,7 @@
 import csv
+from datetime import timedelta
+from decimal import Decimal
+
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseForbidden
@@ -175,6 +178,130 @@ def _auditor_context(user):
 
 
 @login_required
+def global_board(request):
+    """
+    Tablero global de control: cuánto está destinando y pagando el centro
+    a todos los pacientes, de todos los protocolos y de todas las visitas.
+    Acceso: superusuario, site_admin, coordinador y auditor (scoped a su site).
+    """
+    user = request.user
+    if not (user.is_superuser or user.is_site_admin or user.is_coordinator or user.is_auditor):
+        return HttpResponseForbidden("No tenés acceso al tablero global.")
+
+    from django.db.models import Count, Sum
+    from django.db.models.functions import TruncMonth
+    from apps.expenses.models import Expense
+
+    COMMITTED = ['approved', 'settled', 'exported']
+    PENDING = ['ocr_pending', 'pending_review', 'observed']
+
+    qs = Expense.objects.select_related(
+        'visit__patient__protocol', 'visit__visit_type'
+    )
+    if not user.is_superuser and not user.is_site_admin:
+        if not user.site_id:
+            qs = qs.none()
+        else:
+            qs = qs.filter(visit__patient__protocol__site_id=user.site_id)
+
+    committed_qs = qs.filter(status__in=COMMITTED)
+    pending_qs = qs.filter(status__in=PENDING)
+
+    # ── KPIs generales ────────────────────────────────────────────────────
+    committed_by_currency = list(
+        committed_qs.values('currency')
+        .annotate(total=Sum('amount'), count=Count('id'))
+        .order_by('currency')
+    )
+    total_usd = committed_qs.aggregate(total=Sum('amount_usd'))['total'] or Decimal('0')
+    usd_missing_count = committed_qs.filter(amount_usd__isnull=True).count()
+
+    pending_by_currency = list(
+        pending_qs.values('currency')
+        .annotate(total=Sum('amount'), count=Count('id'))
+        .order_by('currency')
+    )
+
+    kpis = {
+        'committed_by_currency': committed_by_currency,
+        'committed_count': committed_qs.count(),
+        'total_usd': total_usd,
+        'usd_missing_count': usd_missing_count,
+        'pending_by_currency': pending_by_currency,
+        'pending_count': pending_qs.count(),
+        'patients_with_expenses': committed_qs.values('visit__patient').distinct().count(),
+        'protocols_with_expenses': committed_qs.values('visit__patient__protocol').distinct().count(),
+    }
+
+    # ── Por protocolo ─────────────────────────────────────────────────────
+    by_protocol = list(
+        committed_qs.values(
+            'visit__patient__protocol__id',
+            'visit__patient__protocol__code',
+            'visit__patient__protocol__name',
+            'visit__patient__protocol__sponsor',
+            'currency',
+        )
+        .annotate(
+            total=Sum('amount'),
+            count=Count('id'),
+            patients=Count('visit__patient', distinct=True),
+        )
+        .order_by('visit__patient__protocol__code', 'currency')
+    )
+    max_protocol_total = max((row['total'] for row in by_protocol), default=Decimal('0'))
+    for row in by_protocol:
+        row['bar_pct'] = int(row['total'] / max_protocol_total * 100) if max_protocol_total else 0
+
+    # ── Por visita (protocolo + tipo de visita) ───────────────────────────
+    by_visit = list(
+        committed_qs.values(
+            'visit__patient__protocol__code',
+            'visit__visit_type__name',
+            'visit__visit_type__order',
+            'currency',
+        )
+        .annotate(total=Sum('amount'), count=Count('id'))
+        .order_by('visit__patient__protocol__code', 'visit__visit_type__order', 'currency')
+    )
+
+    # ── Por categoría ─────────────────────────────────────────────────────
+    by_category = list(
+        committed_qs.values('category', 'currency')
+        .annotate(total=Sum('amount'), count=Count('id'))
+        .order_by('category', 'currency')
+    )
+    category_labels = dict(Expense.CATEGORY_CHOICES)
+    max_category_total = max((row['total'] for row in by_category), default=Decimal('0'))
+    for row in by_category:
+        row['label'] = category_labels.get(row['category'], row['category'])
+        row['bar_pct'] = int(row['total'] / max_category_total * 100) if max_category_total else 0
+
+    # ── Por mes (últimos 12) ──────────────────────────────────────────────
+    today = timezone.now().date()
+    twelve_months_ago = (today.replace(day=1) - timedelta(days=365))
+    by_month = list(
+        committed_qs.filter(expense_date__gte=twelve_months_ago)
+        .annotate(month=TruncMonth('expense_date'))
+        .values('month', 'currency')
+        .annotate(total=Sum('amount'), count=Count('id'))
+        .order_by('month', 'currency')
+    )
+    max_month_total = max((row['total'] for row in by_month), default=Decimal('0'))
+    for row in by_month:
+        row['bar_pct'] = int(row['total'] / max_month_total * 100) if max_month_total else 0
+
+    return render(request, 'dashboard/global_board.html', {
+        'kpis': kpis,
+        'by_protocol': by_protocol,
+        'by_visit': by_visit,
+        'by_category': by_category,
+        'by_month': by_month,
+        'recent_expenses': qs.order_by('-created_at')[:10],
+    })
+
+
+@login_required
 def export_visits_csv(request):
     user = request.user
     if not (user.is_superuser or user.is_site_admin or user.is_coordinator):
@@ -222,109 +349,6 @@ def export_visits_csv(request):
         'cargado': 'Cargado',
     }
 
-
-@login_required
-def auditor_viaticos_dashboard(request):
-    """Dashboard del auditor: gestión de topes y tracking de viáticos por paciente."""
-    user = request.user
-    if not (user.is_superuser or user.is_site_admin or user.is_auditor):
-        return HttpResponseForbidden("No tenés acceso a esta página")
-
-    from apps.patients.models import Patient
-    from apps.protocols.models import Protocol
-    from django.db.models import Sum
-
-    # Filtros
-    protocol_id = request.GET.get('protocol_id')
-    search_query = request.GET.get('search', '').strip()
-
-    # Queryset base
-    patients_qs = Patient.objects.select_related('protocol').filter(is_active=True)
-
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        patients_qs = patients_qs.filter(protocol__site_id=user.site_id)
-
-    if protocol_id:
-        patients_qs = patients_qs.filter(protocol_id=protocol_id)
-
-    if search_query:
-        patients_qs = patients_qs.filter(
-            Q(patient_code__icontains=search_query) | Q(initials__icontains=search_query)
-        )
-
-    # Anotar con totales
-    from django.db.models import DecimalField
-    from apps.expenses.models import Expense
-
-    patients_with_summary = []
-    for patient in patients_qs.order_by('protocol__code', 'patient_code'):
-        total_viaticos = patient.get_total_viaticos()
-        percentage = patient.get_viaticos_percentage()
-        status = patient.get_viaticos_status()
-
-        patients_with_summary.append({
-            'patient': patient,
-            'total_viaticos': total_viaticos,
-            'remaining': float(patient.viatic_cap) - float(total_viaticos),
-            'percentage': percentage,
-            'status': status,
-        })
-
-    protocols = Protocol.objects.filter(is_active=True).order_by('code')
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        protocols = protocols.filter(site_id=user.site_id)
-
-    return render(request, 'dashboard/auditor_viaticos.html', {
-        'patients_with_summary': patients_with_summary,
-        'protocols': protocols,
-        'selected_protocol_id': int(protocol_id) if protocol_id else None,
-        'search_query': search_query,
-        'total_patients': len(patients_with_summary),
-    })
-
-
-@login_required
-def update_patient_viatic_cap(request, patient_id):
-    """Actualiza el tope de viáticos de un paciente (POST)."""
-    from apps.patients.models import Patient
-
-    if request.method != 'POST':
-        return HttpResponseForbidden()
-
-    user = request.user
-    if not (user.is_superuser or user.is_site_admin or user.is_auditor):
-        return HttpResponseForbidden()
-
-    patient = Patient.objects.select_related('protocol').get(pk=patient_id)
-
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        if patient.protocol.site_id != user.site_id:
-            return HttpResponseForbidden()
-
-    new_cap = request.POST.get('viatic_cap', '').strip()
-    if not new_cap:
-        return HttpResponse('El tope no puede estar vacío', status=400)
-
-    try:
-        patient.viatic_cap = float(new_cap)
-        patient.save()
-
-        # Log audit
-        from apps.expenses.models import AuditLog
-        AuditLog.objects.create(
-            user=user,
-            action='updated',
-            content_type='Patient',
-            object_id=patient.pk,
-            object_repr=str(patient),
-            details={'field': 'viatic_cap', 'new_value': str(new_cap)},
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
-
-        return HttpResponse(f'Tope actualizado a ${new_cap}', status=200)
-    except ValueError:
-        return HttpResponse('Tope inválido', status=400)
-
     rows = []
     for v in visits_qs:
         if v.total_expenses == 0:
@@ -370,3 +394,109 @@ def update_patient_viatic_cap(request, patient_id):
         ])
 
     return response
+
+
+@login_required
+def auditor_viaticos_dashboard(request):
+    """Dashboard del auditor: gestión de topes y tracking de viáticos por paciente."""
+    user = request.user
+    if not (user.is_superuser or user.is_site_admin or user.is_auditor):
+        return HttpResponseForbidden("No tenés acceso a esta página")
+
+    from apps.patients.models import Patient
+    from apps.protocols.models import Protocol
+    from django.db.models import Q
+
+    # Filtros
+    protocol_id = request.GET.get('protocol_id')
+    search_query = request.GET.get('search', '').strip()
+
+    # Queryset base
+    patients_qs = Patient.objects.select_related('protocol').filter(is_active=True)
+
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        patients_qs = patients_qs.filter(protocol__site_id=user.site_id)
+
+    if protocol_id:
+        patients_qs = patients_qs.filter(protocol_id=protocol_id)
+
+    if search_query:
+        patients_qs = patients_qs.filter(
+            Q(patient_code__icontains=search_query) | Q(initials__icontains=search_query)
+        )
+
+    patients_with_summary = []
+    for patient in patients_qs.order_by('protocol__code', 'patient_code'):
+        total_viaticos = patient.get_total_viaticos()
+        percentage = patient.get_viaticos_percentage()
+        status = patient.get_viaticos_status()
+
+        patients_with_summary.append({
+            'patient': patient,
+            'total_viaticos': total_viaticos,
+            'remaining': float(patient.viatic_cap) - float(total_viaticos),
+            'percentage': percentage,
+            'status': status,
+        })
+
+    protocols = Protocol.objects.filter(is_active=True).order_by('code')
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        protocols = protocols.filter(site_id=user.site_id)
+
+    return render(request, 'dashboard/auditor_viaticos.html', {
+        'patients_with_summary': patients_with_summary,
+        'protocols': protocols,
+        'selected_protocol_id': int(protocol_id) if protocol_id else None,
+        'search_query': search_query,
+        'total_patients': len(patients_with_summary),
+    })
+
+
+@login_required
+def update_patient_viatic_cap(request, patient_id):
+    """Actualiza el tope de viáticos de un paciente (POST)."""
+    from decimal import Decimal, InvalidOperation
+    from django.shortcuts import get_object_or_404
+    from apps.patients.models import Patient
+
+    if request.method != 'POST':
+        return HttpResponseForbidden()
+
+    user = request.user
+    if not (user.is_superuser or user.is_site_admin or user.is_auditor):
+        return HttpResponseForbidden()
+
+    patient = get_object_or_404(
+        Patient.objects.select_related('protocol'), pk=patient_id
+    )
+
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        if patient.protocol.site_id != user.site_id:
+            return HttpResponseForbidden()
+
+    new_cap = request.POST.get('viatic_cap', '').strip()
+    if not new_cap:
+        return HttpResponse('El tope no puede estar vacío', status=400)
+
+    try:
+        cap_value = Decimal(new_cap)
+    except InvalidOperation:
+        return HttpResponse('Tope inválido', status=400)
+    if cap_value < 0:
+        return HttpResponse('El tope no puede ser negativo', status=400)
+
+    patient.viatic_cap = cap_value
+    patient.save(update_fields=['viatic_cap'])
+
+    from apps.expenses.models import AuditLog
+    AuditLog.objects.create(
+        user=user,
+        action='updated',
+        content_type='Patient',
+        object_id=patient.pk,
+        object_repr=str(patient),
+        details={'field': 'viatic_cap', 'new_value': str(cap_value)},
+        ip_address=request.META.get('REMOTE_ADDR')
+    )
+
+    return HttpResponse(f'Tope actualizado a ${cap_value}', status=200)

@@ -1,0 +1,8 @@
+{% if visit_types %}
+<option value="">— Seleccioná la visita —</option>
+{% for vt in visit_types %}
+<option value="{{ vt.pk }}">{{ vt.name }} ({{ vt.code }})</option>
+{% endfor %}
+{% else %}
+<option value="">— Primero seleccioná el protocolo —</option>
+{% endif %}

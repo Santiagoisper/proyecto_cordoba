@@ -28,18 +28,14 @@
     .header-left { display: table-cell; vertical-align: bottom; }
     .header-right { display: table-cell; text-align: right; vertical-align: bottom; font-size: 8pt; color: #6B7280; }
 
-    /* Confidentiality notice */
     .confidential { background: #FFF7ED; border: 1px solid #FDBA74; border-radius: 4pt; padding: 6pt 10pt; margin-bottom: 14pt; font-size: 8pt; color: #9A3412; }
 
-    /* Metadata table */
     .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14pt; font-size: 9pt; }
     .meta-table td { padding: 4pt 8pt; border: 1px solid #E2E8F0; }
     .meta-table td:first-child { font-weight: bold; background: #F8FAFC; width: 35%; color: #475569; }
 
-    /* Section title */
     .section-title { font-size: 11pt; font-weight: bold; color: #1E3A8A; border-bottom: 1px solid #BFDBFE; padding-bottom: 4pt; margin: 14pt 0 8pt 0; }
 
-    /* Expenses table */
     .expense-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
     .expense-table th { background: #1E3A8A; color: white; padding: 5pt 6pt; text-align: left; font-weight: bold; font-size: 8pt; }
     .expense-table td { padding: 5pt 6pt; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
@@ -47,33 +43,17 @@
     .expense-table .amount { text-align: right; font-weight: bold; font-family: monospace; }
     .ticket-thumb { max-width: 50pt; max-height: 50pt; border: 1px solid #CBD5E1; }
 
-    /* Totals table */
-    .totals-table { width: 50%; margin-left: auto; border-collapse: collapse; margin-top: 10pt; font-size: 9pt; }
+    .totals-table { width: 60%; margin-left: auto; border-collapse: collapse; margin-top: 10pt; font-size: 9pt; }
     .totals-table td { padding: 4pt 8pt; border: 1px solid #E2E8F0; }
     .totals-table td:last-child { text-align: right; font-family: monospace; font-weight: bold; }
     .totals-table .grand-total td { background: #1E3A8A; color: white; font-weight: bold; }
 
-    /* Viaticos box */
-    .viaticos-box { background: #F0F9FF; border: 2px solid #0EA5E9; border-radius: 4pt; padding: 10pt; margin-bottom: 14pt; font-size: 9pt; }
-    .viaticos-box .title { font-weight: bold; color: #0369A1; font-size: 10pt; margin-bottom: 4pt; }
-    .viaticos-row { display: table; width: 100%; margin-bottom: 4pt; }
-    .viaticos-label { display: table-cell; width: 50%; }
-    .viaticos-value { display: table-cell; text-align: right; font-weight: bold; font-family: monospace; }
-    .viaticos-progress { background: #E0F2FE; border-radius: 3pt; height: 12pt; overflow: hidden; margin: 6pt 0; }
-    .viaticos-bar { background: #0EA5E9; height: 100%; transition: width 0.3s; }
-    .viaticos-bar.warning { background: #F59E0B; }
-    .viaticos-bar.danger { background: #EF4444; }
-
-    /* Tickets gallery */
     .tickets-gallery { margin-top: 14pt; page-break-before: always; padding-top: 10pt; }
     .gallery-title { font-size: 12pt; font-weight: bold; color: #1E3A8A; margin-bottom: 10pt; border-bottom: 2px solid #1E3A8A; padding-bottom: 6pt; }
     .gallery-grid { display: table; width: 100%; border-collapse: collapse; }
     .gallery-item { display: table-cell; width: 50%; vertical-align: top; padding: 8pt; }
     .gallery-item img { width: 240pt; border: 1px solid #CBD5E1; border-radius: 4pt; }
     .gallery-item-label { font-size: 7pt; color: #64748B; margin-top: 4pt; text-align: center; }
-
-    /* Footer */
-    .footer { margin-top: 20pt; border-top: 1px solid #E2E8F0; padding-top: 8pt; font-size: 8pt; color: #94A3B8; }
   </style>
 </head>
 <body>
@@ -82,7 +62,7 @@
   <div class="header">
     <div class="header-row">
       <div class="header-left">
-        <p class="header-title">Rendición de Viáticos</p>
+        <p class="header-title">Rendición por Visita — {{ visit_type.name }}</p>
         <p class="header-subtitle">Proyecto Córdoba — CINME / Innova Trials</p>
       </div>
       <div class="header-right">
@@ -102,51 +82,44 @@
   <table class="meta-table">
     <tr><td>Protocolo</td><td>{{ protocol.code }} — {{ protocol.name }}</td></tr>
     <tr><td>Sponsor</td><td>{{ protocol.sponsor|default:"—" }}</td></tr>
-    <tr><td>Fase</td><td>{{ protocol.phase|default:"—" }}</td></tr>
-    <tr><td>Código de paciente</td><td><strong>{{ patient.patient_code }}</strong></td></tr>
+    <tr><td>Visita</td><td><strong>{{ visit_type.name }}</strong> ({{ visit_type.code }})</td></tr>
     <tr><td>Período</td><td>{{ period.name }} ({{ period.date_from|date:"d/m/Y" }} — {{ period.date_to|date:"d/m/Y" }})</td></tr>
+    <tr><td>Pacientes con gastos</td><td>{{ patient_totals|length }}</td></tr>
   </table>
 
-  <!-- Información de viáticos -->
-  {% if patient.viatic_cap %}
-  <div class="viaticos-box">
-    <div class="title">💰 Resumen de Viáticos</div>
-    <div class="viaticos-row">
-      <div class="viaticos-label">Tope asignado:</div>
-      <div class="viaticos-value">USD {% if patient.viatic_cap %}{{ patient.viatic_cap|floatformat:2 }}{% else %}—{% endif %}</div>
-    </div>
-    <div class="viaticos-row">
-      <div class="viaticos-label">Monto ejecutado:</div>
-      <div class="viaticos-value">USD {{ total_viaticos_usd|default:"0.00"|floatformat:2 }}</div>
-    </div>
-    <div class="viaticos-row">
-      <div class="viaticos-label">Disponible:</div>
-      <div class="viaticos-value">USD {{ remaining_viaticos|default:"0.00"|floatformat:2 }}</div>
-    </div>
-    {% if percentage_used %}
-    <div class="viaticos-progress">
-      <div class="viaticos-bar {% if percentage_used >= 100 %}danger{% elif percentage_used > 80 %}warning{% endif %}" style="width: {{ percentage_used|default:"0" }}%;"></div>
-    </div>
-    <div style="text-align:right;font-size:8pt;color:#64748B;">{{ percentage_used|default:"0"|floatformat:0 }}% utilizado</div>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <!-- Gastos -->
-  <div class="section-title">Detalle de gastos aprobados</div>
-
+  <!-- Resumen por paciente -->
+  <div class="section-title">Resumen por paciente</div>
   <table class="expense-table">
     <thead>
       <tr>
+        <th>Código de paciente</th>
+        <th style="text-align:right;">Comprobantes</th>
+        <th style="text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in patient_totals %}
+      <tr>
+        <td><strong>{{ row.patient_code }}</strong></td>
+        <td class="amount">{{ row.count }}</td>
+        <td class="amount">${{ row.total|ars }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Detalle de gastos -->
+  <div class="section-title">Detalle de gastos aprobados</div>
+  <table class="expense-table">
+    <thead>
+      <tr>
+        <th>Paciente</th>
         <th>Fecha</th>
-        <th>Visita</th>
         <th>Categoría</th>
-        <th>Tipo comp.</th>
         <th>Proveedor</th>
         <th>CUIT</th>
         <th>N° Comp.</th>
         <th style="text-align:right;">Monto</th>
-        <th style="text-align:right;">IVA</th>
         <th>Ticket</th>
       </tr>
     </thead>
@@ -154,19 +127,13 @@
       {% for row in expenses %}
       {% with exp=row.expense %}
       <tr>
+        <td><strong>{{ exp.visit.patient.patient_code }}</strong></td>
         <td>{{ exp.expense_date|date:"d/m/Y" }}</td>
-        <td>{{ exp.visit.visit_type.name }}</td>
         <td>{{ exp.get_category_display }}</td>
-        <td>{{ exp.ocr_extracted.receipt_type|default:"—" }}</td>
         <td>{{ exp.vendor|default:"—" }}</td>
         <td>{{ exp.ocr_extracted.cuit|default:"—" }}</td>
         <td>{{ exp.ocr_extracted.receipt_number|default:"—" }}</td>
         <td class="amount">${{ exp.amount|ars }} {{ exp.currency }}</td>
-        <td class="amount">
-          {% if exp.ocr_extracted.iva %}
-            ${{ exp.ocr_extracted.iva|ars }}
-          {% else %}—{% endif %}
-        </td>
         <td>
           {% if row.ticket_b64 %}
             <img src="{{ row.ticket_b64 }}" class="ticket-thumb" alt="Ticket" />
@@ -182,32 +149,8 @@
     </tbody>
   </table>
 
-  <!-- Resumen por visita -->
-  {% if totals_by_visit %}
-  <div class="section-title">Resumen por visita</div>
-  <table class="expense-table">
-    <thead>
-      <tr>
-        <th>Visita</th>
-        <th style="text-align:right;">Comprobantes</th>
-        <th style="text-align:right;">Subtotal</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in totals_by_visit %}
-      <tr>
-        <td>{{ row.visit_type.name }}</td>
-        <td class="amount">{{ row.count }}</td>
-        <td class="amount">${{ row.total|ars }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  <!-- Totales -->
+  <!-- Totales por categoría -->
   <div class="section-title">Resumen por categoría</div>
-
   <table class="totals-table">
     {% for cat_key, cat_data in totals.by_category.items %}
     <tr>
@@ -216,7 +159,7 @@
     </tr>
     {% endfor %}
     <tr class="grand-total">
-      <td>TOTAL GENERAL</td>
+      <td>TOTAL VISITA {{ visit_type.name|upper }}</td>
       <td>${{ totals.total|ars }}</td>
     </tr>
   </table>
@@ -224,14 +167,14 @@
   <!-- Anexo: Galería de tickets -->
   {% if tickets_with_images %}
   <div class="tickets-gallery">
-    <div class="gallery-title">📎 ANEXO A: Fotos de Tickets</div>
+    <div class="gallery-title">📎 ANEXO A: Comprobantes de la visita</div>
     <div class="gallery-grid">
       {% for item in tickets_with_images %}
       {% if item.ticket_b64 %}
       <div class="gallery-item">
         <img src="{{ item.ticket_b64 }}" alt="Ticket {{ item.date }}" />
         <div class="gallery-item-label">
-          {{ item.date|date:"d/m/Y" }} — {{ item.vendor|truncatewords:3 }}<br>
+          Paciente {{ item.patient_code }} — {{ item.date|date:"d/m/Y" }} — {{ item.vendor|truncatewords:3 }}<br>
           {{ item.category|upper }} — ${{ item.amount|ars }} {{ item.currency }}
         </div>
       </div>

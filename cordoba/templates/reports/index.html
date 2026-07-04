@@ -7,7 +7,7 @@
 
   <div class="mb-6">
     <h1 class="text-2xl font-bold text-slate-900">Generación de reportes</h1>
-    <p class="text-slate-500 text-sm mt-1">PDF por paciente, PDF consolidado del site y exportación Excel.</p>
+    <p class="text-slate-500 text-sm mt-1">PDF por paciente, por visita, consolidado del protocolo y exportación Excel.</p>
   </div>
 
   {% if error %}
@@ -73,6 +73,68 @@
           <button type="submit"
             onclick="return validatePatientForm()"
             class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
+            <i data-lucide="download" class="h-4 w-4"></i>
+            Generar y descargar PDF
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── PDF por visita ────────────────────────────────────────────────── -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+        <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-violet-100">
+          <i data-lucide="calendar-check" class="h-4 w-4 text-violet-600"></i>
+        </div>
+        <div>
+          <h2 class="font-semibold text-slate-800">PDF por visita</h2>
+          <p class="text-xs text-slate-500">Todos los pacientes que realizaron una visita del protocolo, con sus comprobantes</p>
+        </div>
+      </div>
+      <div class="px-6 py-5">
+        <form method="post" action="{% url 'reports:visit_pdf' %}" class="space-y-4">
+          {% csrf_token %}
+
+          <!-- Protocolo -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Protocolo</label>
+            <select name="protocol_id" id="visit-protocol-select"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500"
+              hx-get="{% url 'reports:htmx_visit_types' %}"
+              hx-target="#visit-type-select"
+              hx-trigger="change"
+              hx-vals='js:{"protocol": document.getElementById("visit-protocol-select").value}'>
+              <option value="">— Seleccioná un protocolo —</option>
+              {% for protocol in protocols %}
+              <option value="{{ protocol.pk }}">{{ protocol.code }} — {{ protocol.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Tipo de visita (cargado por HTMX) -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Visita</label>
+            <select name="visit_type_id" id="visit-type-select"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500">
+              <option value="">— Primero seleccioná el protocolo —</option>
+            </select>
+          </div>
+
+          <!-- Período (cargado por HTMX desde el mismo select de protocolo) -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Período</label>
+            <select name="period_id" id="visit-period-select"
+              class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500"
+              hx-get="{% url 'reports:htmx_periods' %}"
+              hx-trigger="change from:#visit-protocol-select"
+              hx-vals='js:{"protocol": document.getElementById("visit-protocol-select").value}'>
+              <option value="">— Primero seleccioná el protocolo —</option>
+            </select>
+          </div>
+
+          <button type="submit"
+            onclick="return validateVisitForm()"
+            class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors">
             <i data-lucide="download" class="h-4 w-4"></i>
             Generar y descargar PDF
           </button>
@@ -167,6 +229,17 @@ function validatePatientForm() {
   const period = document.getElementById('patient-period-select').value;
   if (!patient || !period) {
     alert('Por favor seleccioná protocolo, paciente y período antes de generar el reporte.');
+    return false;
+  }
+  return true;
+}
+
+function validateVisitForm() {
+  const protocol = document.getElementById('visit-protocol-select').value;
+  const visitType = document.getElementById('visit-type-select').value;
+  const period = document.getElementById('visit-period-select').value;
+  if (!protocol || !visitType || !period) {
+    alert('Por favor seleccioná protocolo, visita y período antes de generar el reporte.');
     return false;
   }
   return true;

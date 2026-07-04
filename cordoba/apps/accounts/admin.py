@@ -2,6 +2,10 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import User
 
+admin.site.site_header = 'Proyecto Córdoba — Administración'
+admin.site.site_title = 'Proyecto Córdoba'
+admin.site.index_title = 'Gestión de bases: protocolos, pacientes, visitas y gastos'
+
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):

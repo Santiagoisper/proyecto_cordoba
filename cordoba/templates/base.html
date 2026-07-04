@@ -5,48 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Proyecto Córdoba{% endblock %} — Viáticos Clínicos</title>
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS (vendorizado localmente: funciona sin internet) -->
+  {% load static %}
+  <script src="{% static 'js/tailwind.min.js' %}"></script>
   <script>
+    /* Paleta cálida de industria farmacéutica:
+       primary  = verde petróleo profundo (clínico pero cálido)
+       secondary = verde salvia (estados positivos)
+       accent   = terracota/ámbar (calidez, llamadas a la acción suaves) */
     tailwind.config = {
       theme: {
         extend: {
           colors: {
             primary: {
-              50:  '#f0f5ff',
-              100: '#e0ebff',
-              200: '#c1d9ff',
-              300: '#a2c7ff',
-              400: '#83b5ff',
-              500: '#0051c4',
-              600: '#003fa3',
-              700: '#002d7a',
-              800: '#001b51',
-              900: '#000d28',
+              50:  '#eefaf7',
+              100: '#d6f2ec',
+              200: '#aee4d9',
+              300: '#7ed0c2',
+              400: '#4bb5a5',
+              500: '#159587',
+              600: '#0e7a6f',
+              700: '#0b615a',
+              800: '#084a45',
+              900: '#06332f',
             },
             secondary: {
-              50:  '#f0fdf4',
-              100: '#dcfce7',
-              200: '#bbf7d0',
-              300: '#86efac',
-              400: '#4ade80',
-              500: '#00a556',
-              600: '#008c45',
-              700: '#007234',
-              800: '#005823',
-              900: '#004012',
+              50:  '#f4faf1',
+              100: '#e5f4dd',
+              200: '#cbe8bc',
+              300: '#a8d792',
+              400: '#7fc264',
+              500: '#5aa93f',
+              600: '#468a2f',
+              700: '#366c25',
+              800: '#28511c',
+              900: '#1c3a14',
             },
             accent: {
-              50:  '#faf9f6',
-              100: '#f5f2ed',
-              200: '#ebe5db',
-              300: '#ddd4c5',
-              400: '#cfc3af',
-              500: '#b8a99a',
-              600: '#9d8f85',
-              700: '#82756a',
-              800: '#675c50',
-              900: '#4c4238',
+              50:  '#fdf6ef',
+              100: '#faeadb',
+              200: '#f4d3b5',
+              300: '#ecb888',
+              400: '#e29a5c',
+              500: '#d67e39',
+              600: '#b96527',
+              700: '#954f1f',
+              800: '#703c19',
+              900: '#4d2a12',
             }
           },
           fontFamily: {
@@ -58,35 +63,42 @@
   </script>
 
   <!-- HTMX -->
-  {% load static %}
   <script src="{% static 'js/htmx.min.js' %}"></script>
 
   <!-- Lucide Icons -->
   <script src="{% static 'js/lucide.min.js' %}"></script>
 
-  <!-- Chart.js para gráficos animados -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+  <!-- Chart.js para gráficos animados (vendorizado localmente) -->
+  <script src="{% static 'js/chart.umd.js' %}"></script>
 
   {% block extra_head %}{% endblock %}
 
   <style>
-    /* Tema Noche */
+    /* Tema Día: fondo crema cálido */
+    html {
+      background-color: #f8f6f1;
+    }
+    body {
+      background-color: #f8f6f1;
+    }
+
+    /* Tema Noche: verde petróleo oscuro y cálido */
     html.dark {
-      background: #1a2d3d;
+      background: #142825;
     }
 
     html.dark body {
-      background: #1a2d3d;
+      background: #142825;
       color: rgba(255, 255, 255, 0.75);
     }
 
     html.dark .bg-slate-50,
     html.dark .bg-white {
-      background: #243646;
+      background: #1d3531;
     }
 
     html.dark .bg-slate-100 {
-      background: #2d4455;
+      background: #26423d;
     }
 
     html.dark .text-slate-900,
@@ -116,15 +128,15 @@
     }
 
     html.dark .bg-primary-50 {
-      background: rgba(3, 105, 161, 0.10);
+      background: rgba(21, 149, 135, 0.10);
     }
 
     html.dark .hover\:bg-primary-50:hover {
-      background: rgba(3, 105, 161, 0.15);
+      background: rgba(21, 149, 135, 0.15);
     }
 
     html.dark .hover\:bg-slate-100:hover {
-      background: #2d4455;
+      background: #26423d;
     }
 
     html.dark .shadow-sm {
@@ -132,13 +144,13 @@
     }
 
     html.dark .rounded-lg {
-      background: #243646 !important;
+      background: #1d3531 !important;
     }
 
     html.dark input,
     html.dark textarea,
     html.dark select {
-      background: #2d4455;
+      background: #26423d;
       color: rgba(255, 255, 255, 0.80);
       border-color: rgba(255, 255, 255, 0.10);
     }
@@ -154,7 +166,7 @@
     }
 
     html.dark .bg-slate-200 {
-      background: #2d4455;
+      background: #26423d;
     }
 
     html.dark .text-primary-200,
@@ -177,11 +189,11 @@
                   onclick="toggleSidebar()">
             <i data-lucide="menu" class="h-5 w-5"></i>
           </button>
-          <div class="flex items-center gap-2">
-            <i data-lucide="beaker" class="h-6 w-6 text-secondary-300"></i>
-            <div class="flex flex-col">
-              <span class="text-white font-bold text-lg leading-tight">Proyecto Córdoba</span>
-              <span class="text-primary-200 text-xs">Viáticos de Investigación Clínica</span>
+          <div class="flex items-center gap-2 min-w-0">
+            <i data-lucide="beaker" class="h-6 w-6 text-secondary-300 shrink-0"></i>
+            <div class="flex flex-col min-w-0">
+              <span class="text-white font-bold text-base sm:text-lg leading-tight whitespace-nowrap">Proyecto Córdoba</span>
+              <span class="hidden sm:block text-primary-200 text-xs">Viáticos de Investigación Clínica</span>
             </div>
           </div>
           {% if user.is_authenticated and user.site_name %}
@@ -190,10 +202,10 @@
         </div>
 
         {% if user.is_authenticated %}
-        <div class="flex items-center gap-6">
+        <div class="flex items-center gap-3 sm:gap-6 shrink-0">
           <!-- User info card -->
-          <div class="flex items-center gap-3 bg-primary-700 rounded-lg px-4 py-2">
-            <div class="flex flex-col items-end">
+          <div class="flex items-center gap-3 bg-primary-700 rounded-lg px-3 sm:px-4 py-2">
+            <div class="hidden sm:flex flex-col items-end">
               <span class="text-white text-sm font-semibold">{{ user.get_full_name|default:user.username }}</span>
               <span class="text-primary-200 text-xs font-medium">
                 {% if user.is_superuser %}Administrador
@@ -303,6 +315,9 @@
         {% if user.is_coordinator or user.is_site_admin or user.is_auditor or user.is_superuser %}
         <div class="pt-4 mt-2 border-t border-slate-200">
           <p class="px-3 pb-2 text-xs font-bold text-primary-700 uppercase tracking-wider">📈 Reportes & Auditoría</p>
+          <a href="{% url 'dashboard:global_board' %}" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors border-l-2 border-transparent hover:border-primary-600">
+            <i data-lucide="bar-chart-3" class="h-4 w-4 shrink-0"></i><span>Tablero global</span>
+          </a>
           <a href="{% url 'reports:index' %}" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors border-l-2 border-transparent hover:border-primary-600">
             <i data-lucide="file-text" class="h-4 w-4 shrink-0"></i><span>PDF / Excel</span>
           </a>

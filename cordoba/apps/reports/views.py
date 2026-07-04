@@ -4,7 +4,7 @@ from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import render, get_object_or_404
 from django.views.decorators.http import require_GET, require_POST
 
-from apps.protocols.models import Protocol
+from apps.protocols.models import Protocol, VisitType
 from apps.patients.models import Patient
 from apps.expenses.models import ExpensePeriod
 
@@ -215,6 +215,58 @@ def site_excel(request):
     return response
 
 
+@login_required
+@require_POST
+def visit_pdf(request):
+    """
+    POST — Genera y descarga el PDF de rendición de una visita del protocolo
+    en un período: todos los pacientes que la realizaron, con comprobantes.
+    Recibe protocol_id, visit_type_id y period_id (CSRF protegido).
+    """
+    if not _can_report(request.user):
+        return HttpResponseForbidden("No tenés permiso para generar reportes.")
+
+    protocol_id = request.POST.get('protocol_id')
+    visit_type_id = request.POST.get('visit_type_id')
+    period_id = request.POST.get('period_id')
+
+    if not protocol_id or not visit_type_id or not period_id:
+        return render(request, 'reports/index.html', {
+            'protocols': _protocols_ctx(request.user),
+            'error': 'Seleccioná protocolo, visita y período antes de generar el reporte.',
+        })
+
+    protocol = get_object_or_404(
+        _scope_protocol(request.user, Protocol.objects.all()),
+        pk=protocol_id,
+    )
+    visit_type = get_object_or_404(VisitType, pk=visit_type_id, protocol=protocol)
+    period = get_object_or_404(
+        _scope_period(request.user, ExpensePeriod.objects.all()),
+        pk=period_id, protocol=protocol,
+    )
+
+    try:
+        from .generators import generate_visit_pdf
+        pdf_bytes = generate_visit_pdf(protocol, visit_type, period, request.user)
+    except ValueError as e:
+        return render(request, 'reports/index.html', {
+            'protocols': _protocols_ctx(request.user),
+            'error': str(e),
+        })
+    except Exception as e:
+        logger.exception("Error generando PDF de visita %s: %s", visit_type_id, e)
+        return render(request, 'reports/index.html', {
+            'protocols': _protocols_ctx(request.user),
+            'error': f'Error al generar el PDF: {e}',
+        })
+
+    filename = f"visita_{visit_type.code}_{protocol.code}_{period.name.replace(' ', '_')}.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
 # ─── HTMX chained selects ────────────────────────────────────────────────────
 
 @login_required
@@ -255,6 +307,24 @@ def htmx_patients_for_protocol(request):
             protocol_id=protocol_id, is_active=True
         )).order_by('patient_code')
     return render(request, 'reports/partials/patient_options.html', {'patients': patients})
+
+
+@login_required
+@require_GET
+def htmx_visit_types_for_protocol(request):
+    """Tipos de visita de un protocolo (para selector de PDF por visita)."""
+    if not _can_report(request.user):
+        return HttpResponseForbidden()
+    protocol_id = request.GET.get('protocol')
+    visit_types = []
+    if protocol_id:
+        protocol = _scope_protocol(
+            request.user, Protocol.objects.filter(pk=protocol_id)
+        ).first()
+        if not protocol:
+            return render(request, 'reports/partials/visit_type_options.html', {'visit_types': []})
+        visit_types = VisitType.objects.filter(protocol=protocol).order_by('order')
+    return render(request, 'reports/partials/visit_type_options.html', {'visit_types': visit_types})
 
 
 @login_required

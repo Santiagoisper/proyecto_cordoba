@@ -56,6 +56,33 @@ def _calc_totals(expenses) -> dict:
     }
 
 
+def _calc_totals_by_visit(expenses) -> list:
+    """
+    Agrupa gastos por tipo de visita y devuelve subtotales ordenados
+    según el orden de las visitas en el protocolo.
+    """
+    by_visit = {}
+    for exp in expenses:
+        vt = exp.visit.visit_type
+        entry = by_visit.setdefault(vt.pk, {
+            'visit_type': vt,
+            'count': 0,
+            'total': Decimal('0'),
+            'by_category': defaultdict(Decimal),
+        })
+        entry['count'] += 1
+        entry['total'] += exp.amount
+        entry['by_category'][exp.category] += exp.amount
+
+    rows = sorted(by_visit.values(), key=lambda e: e['visit_type'].order)
+    for row in rows:
+        row['by_category'] = {
+            cat: {'label': CATEGORY_LABELS.get(cat, cat), 'amount': amt}
+            for cat, amt in sorted(row['by_category'].items())
+        }
+    return rows
+
+
 def _render_pdf(template_name: str, context: dict) -> bytes:
     """Renderiza un template HTML a PDF usando xhtml2pdf."""
     from xhtml2pdf import pisa
@@ -167,6 +194,7 @@ def generate_patient_pdf(patient, period, requested_by) -> bytes:
         'protocol': patient.protocol,
         'expenses': expense_rows,
         'totals': totals,
+        'totals_by_visit': _calc_totals_by_visit(expenses),
         'total_viaticos_usd': total_viaticos_usd,
         'remaining_viaticos': remaining_viaticos,
         'percentage_used': percentage_used,
@@ -254,6 +282,7 @@ def generate_site_pdf(protocol, period, requested_by) -> bytes:
         'period': period,
         'patient_sections': patient_sections,
         'executive_summary': executive_summary,
+        'totals_by_visit': _calc_totals_by_visit(all_expenses),
         'grand_total': grand_total,
         'generated_by': requested_by,
         'generated_at': timezone.now(),
@@ -263,6 +292,87 @@ def generate_site_pdf(protocol, period, requested_by) -> bytes:
     pdf_bytes = _render_pdf('reports/pdf_site.html', context)
     report_label = f"PDF consolidado {protocol.code} / {period.name}"
     _mark_expenses_exported(all_expenses, requested_by, 'site_pdf', report_label)
+
+    return pdf_bytes
+
+
+# ─── PDF por visita ───────────────────────────────────────────────────────────
+
+def generate_visit_pdf(protocol, visit_type, period, requested_by) -> bytes:
+    """
+    Genera el PDF de rendición de una visita del protocolo en un período:
+    todos los pacientes que realizaron esa visita, con sus comprobantes.
+    Solo código de paciente — nunca nombre real.
+    Marca los gastos como 'exported' y crea AuditLog.
+    """
+    from apps.expenses.models import Expense
+
+    expenses = list(
+        Expense.objects.filter(
+            visit__patient__protocol=protocol,
+            visit__visit_type=visit_type,
+            expense_date__gte=period.date_from,
+            expense_date__lte=period.date_to,
+            status__in=REPORT_STATUSES,
+        ).select_related(
+            'visit__patient', 'visit__visit_type',
+        ).prefetch_related('ticket_files')
+        .order_by('visit__patient__patient_code', 'expense_date')
+    )
+
+    if not expenses:
+        raise ValueError(
+            f"No hay gastos aprobados para la visita «{visit_type.name}» "
+            f"de {protocol.code} en el período {period.name}."
+        )
+
+    expense_rows = []
+    tickets_with_images = []
+    patient_totals = {}
+
+    for exp in expenses:
+        ticket = exp.ticket_files.first()
+        ticket_b64 = _ticket_to_base64(ticket)
+        expense_rows.append({
+            'expense': exp,
+            'ticket_b64': ticket_b64,
+            'ticket_filename': ticket.original_filename if ticket else '',
+        })
+
+        code = exp.visit.patient.patient_code
+        entry = patient_totals.setdefault(code, {'patient_code': code, 'count': 0, 'total': Decimal('0')})
+        entry['count'] += 1
+        entry['total'] += exp.amount
+
+        if ticket_b64:
+            tickets_with_images.append({
+                'ticket_b64': ticket_b64,
+                'patient_code': code,
+                'date': exp.expense_date,
+                'vendor': exp.vendor,
+                'category': exp.get_category_display(),
+                'amount': exp.amount,
+                'currency': exp.currency,
+            })
+
+    totals = _calc_totals(expenses)
+
+    context = {
+        'protocol': protocol,
+        'visit_type': visit_type,
+        'period': period,
+        'expenses': expense_rows,
+        'totals': totals,
+        'patient_totals': sorted(patient_totals.values(), key=lambda e: e['patient_code']),
+        'tickets_with_images': tickets_with_images,
+        'generated_by': requested_by,
+        'generated_at': timezone.now(),
+        'report_type': 'visit',
+    }
+
+    pdf_bytes = _render_pdf('reports/pdf_visit.html', context)
+    report_label = f"PDF visita {visit_type.name} / {protocol.code} / {period.name}"
+    _mark_expenses_exported(expenses, requested_by, 'visit_pdf', report_label)
 
     return pdf_bytes
 

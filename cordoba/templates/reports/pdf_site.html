@@ -9,10 +9,11 @@
       margin: 2cm 1.5cm 2.5cm 1.5cm;
       @frame footer_frame {
         -pdf-frame-border: 0;
+        -pdf-frame-content: footer_content;
         bottom: 0.4cm;
-        left: 0cm;
-        right: 0cm;
-        height: 0.8cm;
+        left: 1cm;
+        right: 1cm;
+        height: 1.6cm;
       }
     }
 
@@ -122,6 +123,29 @@
     </tbody>
   </table>
 
+  <!-- Resumen por visita -->
+  {% if totals_by_visit %}
+  <div class="section-title">Resumen por visita — Todos los pacientes</div>
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th>Visita</th>
+        <th>Comprobantes</th>
+        <th>TOTAL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in totals_by_visit %}
+      <tr>
+        <td>{{ row.visit_type.name }}</td>
+        <td>{{ row.count }}</td>
+        <td>${{ row.total|ars }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
   <!-- Sección por paciente -->
   {% for section in patient_sections %}
   <div class="page-break"></div>
@@ -183,11 +207,9 @@
   {% endfor %}
 
   <!-- Footer con número de página (xhtml2pdf: -pdf-frame-content) -->
-  <div style="-pdf-frame-content: footer_frame; text-align: center; font-size: 8pt; color: #94A3B8;">
-    Proyecto Córdoba v1.0 — Confidencial GCP/ANMAT —
-    Gastos con estado Aprobado, Liquidado o Exportado —
-    Generado {{ generated_at|date:"d/m/Y H:i" }} UTC por {{ generated_by.get_full_name|default:generated_by.username }} —
-    Página <pdf:pagenumber/> de <pdf:pagecount/>
+  <div id="footer_content" style="text-align: center; font-size: 7pt; color: #94A3B8;">
+    Proyecto Córdoba — Confidencial GCP/ANMAT — Generado {{ generated_at|date:"d/m/Y H:i" }} UTC
+    — Página <pdf:pagenumber/> de <pdf:pagecount/>
   </div>
 
 </body>

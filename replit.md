@@ -1,6 +1,6 @@
 # Proyecto Córdoba — Viáticos para Investigación Clínica
 
-Sistema web de gestión de viáticos para pacientes de ensayos clínicos. Asistentes suben tickets de gastos, el OCR extrae datos, coordinadores aprueban, y el sistema genera PDFs GCP-compliant por paciente y consolidados por site.
+Sistema web de gestión de viáticos para pacientes de ensayos clínicos. Asistentes suben tickets de gastos, el OCR extrae datos, coordinadores aprueban, y el sistema genera PDFs GCP-compliant por paciente, por visita y consolidados por site. Incluye tablero global de control de gasto (`/dashboard/tablero/`).
 
 ## Run & Operate
 
@@ -17,7 +17,7 @@ Sistema web de gestión de viáticos para pacientes de ensayos clínicos. Asiste
 ## Stack
 
 - **Backend:** Django 5.1 + PostgreSQL (via django-environ)
-- **Frontend:** Django Templates + HTMX 2.x + Tailwind CSS 4.x (CDN) + Lucide Icons
+- **Frontend:** Django Templates + HTMX 2.x + Tailwind (vendorizado en `static/js/tailwind.min.js`, sin CDN) + Lucide Icons
 - **Auth:** django-allauth con 4 grupos: `site_admin`, `coordinator`, `assistant`, `auditor`
 - **Estáticos:** Whitenoise
 - **Async OCR (Etapa 2):** Celery + Redis (no configurado aún)
@@ -56,6 +56,20 @@ Sistema web de gestión de viáticos para pacientes de ensayos clínicos. Asiste
 - Español argentino en toda la UI y mensajes.
 - Mobile-first: diseñar primero para 375px.
 - Seguridad no negociable: códigos de paciente, AuditLog inmutable, períodos cerrados no modificables.
+
+## Reportes para sponsor
+
+- `/reports/` — tres reportes, todos POST + CSRF, todos anonimizados (solo `patient_code`):
+  - **PDF por paciente** (`reports:patient_pdf`): gastos aprobados + galería de comprobantes + resumen por visita.
+  - **PDF por visita** (`reports:visit_pdf`): todos los pacientes que hicieron esa visita del protocolo, con comprobantes.
+  - **PDF consolidado / Excel** (`reports:site_pdf`, `reports:site_excel`): resumen ejecutivo por paciente + por visita.
+- Al generar un reporte los gastos pasan a `exported` y queda AuditLog.
+- xhtml2pdf: el pie de página se declara con `-pdf-frame-content: <id-del-div>` DENTRO del `@frame` (no como estilo inline del div); si no, el contenido del cuerpo fluye al frame del pie y rompe con LayoutError. Las imágenes no aceptan `width: %`.
+
+## Diseño
+
+- Paleta cálida farma definida en `templates/base.html` (tailwind.config): `primary` verde petróleo, `secondary` salvia, `accent` terracota; fondo crema `#f8f6f1`; tema noche verde petróleo oscuro.
+- Todos los assets JS son locales (`static/js/`): tailwind, htmx, lucide, chart.umd — la app funciona sin internet.
 
 ## Gotchas
 

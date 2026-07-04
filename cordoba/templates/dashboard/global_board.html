@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% load currency_tags %}
+
+{% block title %}Tablero global de gastos{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+
+  <!-- Encabezado -->
+  <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Tablero global de gastos</h1>
+      <p class="text-slate-500 text-sm mt-1">
+        Cuánto está destinando el centro a viáticos de pacientes — todos los protocolos, todas las visitas.
+      </p>
+    </div>
+    <a href="{% url 'reports:index' %}"
+       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium transition-colors">
+      <i data-lucide="file-text" class="h-4 w-4"></i>
+      Generar reportes para sponsor
+    </a>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="p-2 bg-green-100 rounded-lg">
+          <i data-lucide="wallet" class="h-5 w-5 text-green-700"></i>
+        </div>
+        <span class="text-sm text-slate-500 font-medium">Total comprometido</span>
+      </div>
+      {% if kpis.committed_by_currency %}
+        {% for row in kpis.committed_by_currency %}
+        <p class="text-2xl font-bold text-slate-900 leading-tight">
+          ${{ row.total|ars }} <span class="text-sm font-semibold text-slate-500">{{ row.currency }}</span>
+        </p>
+        {% endfor %}
+      {% else %}
+        <p class="text-2xl font-bold text-slate-900">$0,00</p>
+      {% endif %}
+      <p class="text-xs text-slate-500 mt-1">Aprobado + liquidado + exportado</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="p-2 bg-primary-100 rounded-lg">
+          <i data-lucide="dollar-sign" class="h-5 w-5 text-primary-600"></i>
+        </div>
+        <span class="text-sm text-slate-500 font-medium">Equivalente USD</span>
+      </div>
+      <p class="text-2xl font-bold text-slate-900">USD {{ kpis.total_usd|ars }}</p>
+      {% if kpis.usd_missing_count %}
+      <p class="text-xs text-amber-600 mt-1">{{ kpis.usd_missing_count }} gasto(s) sin tipo de cambio</p>
+      {% else %}
+      <p class="text-xs text-slate-500 mt-1">Para control contra budget</p>
+      {% endif %}
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="p-2 bg-amber-100 rounded-lg">
+          <i data-lucide="clock" class="h-5 w-5 text-amber-600"></i>
+        </div>
+        <span class="text-sm text-slate-500 font-medium">En proceso</span>
+      </div>
+      {% if kpis.pending_by_currency %}
+        {% for row in kpis.pending_by_currency %}
+        <p class="text-2xl font-bold text-amber-600 leading-tight">
+          ${{ row.total|ars }} <span class="text-sm font-semibold text-slate-500">{{ row.currency }}</span>
+        </p>
+        {% endfor %}
+      {% else %}
+        <p class="text-2xl font-bold text-amber-600">$0,00</p>
+      {% endif %}
+      <p class="text-xs text-slate-500 mt-1">{{ kpis.pending_count }} comprobante(s) sin aprobar</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="p-2 bg-violet-100 rounded-lg">
+          <i data-lucide="users" class="h-5 w-5 text-violet-600"></i>
+        </div>
+        <span class="text-sm text-slate-500 font-medium">Alcance</span>
+      </div>
+      <p class="text-2xl font-bold text-slate-900">{{ kpis.patients_with_expenses }} paciente(s)</p>
+      <p class="text-xs text-slate-500 mt-1">
+        {{ kpis.protocols_with_expenses }} protocolo(s) · {{ kpis.committed_count }} comprobante(s)
+      </p>
+    </div>
+
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+    <!-- Por protocolo -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+        <i data-lucide="flask-conical" class="h-4 w-4 text-primary-600"></i>
+        <h2 class="font-semibold text-slate-800">Gasto por protocolo</h2>
+      </div>
+      {% if by_protocol %}
+      <div class="px-6 py-4 space-y-4">
+        {% for row in by_protocol %}
+        <div>
+          <div class="flex items-baseline justify-between gap-3 mb-1">
+            <span class="text-sm font-medium text-slate-700 truncate" title="{{ row.visit__patient__protocol__name }}">
+              {{ row.visit__patient__protocol__code }}
+              {% if row.visit__patient__protocol__sponsor %}
+              <span class="text-xs text-slate-400">· {{ row.visit__patient__protocol__sponsor }}</span>
+              {% endif %}
+            </span>
+            <span class="text-sm font-semibold text-slate-900 shrink-0">
+              ${{ row.total|ars }} {{ row.currency }}
+            </span>
+          </div>
+          <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-primary-500 rounded-full" style="width: {{ row.bar_pct }}%;"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">{{ row.count }} comprobante(s) · {{ row.patients }} paciente(s)</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="px-6 py-10 text-center text-sm text-slate-500">Todavía no hay gastos aprobados.</div>
+      {% endif %}
+    </div>
+
+    <!-- Por categoría -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+        <i data-lucide="tags" class="h-4 w-4 text-primary-600"></i>
+        <h2 class="font-semibold text-slate-800">Gasto por categoría</h2>
+      </div>
+      {% if by_category %}
+      <div class="px-6 py-4 space-y-4">
+        {% for row in by_category %}
+        <div>
+          <div class="flex items-baseline justify-between gap-3 mb-1">
+            <span class="text-sm font-medium text-slate-700">{{ row.label }}</span>
+            <span class="text-sm font-semibold text-slate-900 shrink-0">
+              ${{ row.total|ars }} {{ row.currency }}
+            </span>
+          </div>
+          <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-primary-500 rounded-full" style="width: {{ row.bar_pct }}%;"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">{{ row.count }} comprobante(s)</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="px-6 py-10 text-center text-sm text-slate-500">Todavía no hay gastos aprobados.</div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Evolución mensual -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm mb-8">
+    <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="trending-up" class="h-4 w-4 text-primary-600"></i>
+      <h2 class="font-semibold text-slate-800">Evolución mensual (últimos 12 meses)</h2>
+    </div>
+    {% if by_month %}
+    <div class="px-6 py-4 space-y-3">
+      {% for row in by_month %}
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-medium text-slate-500 w-20 shrink-0">{{ row.month|date:"M Y" }}</span>
+        <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full bg-primary-500 rounded-full" style="width: {{ row.bar_pct }}%;"></div>
+        </div>
+        <span class="text-sm font-semibold text-slate-900 w-40 text-right shrink-0">
+          ${{ row.total|ars }} {{ row.currency }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-6 py-10 text-center text-sm text-slate-500">Sin movimientos en los últimos 12 meses.</div>
+    {% endif %}
+  </div>
+
+  <!-- Por visita -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm mb-8">
+    <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="calendar-check" class="h-4 w-4 text-primary-600"></i>
+      <h2 class="font-semibold text-slate-800">Gasto por visita</h2>
+    </div>
+    {% if by_visit %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs text-slate-500 uppercase tracking-wider border-b border-slate-100">
+            <th class="px-6 py-3">Protocolo</th>
+            <th class="px-6 py-3">Visita</th>
+            <th class="px-6 py-3 text-right">Comprobantes</th>
+            <th class="px-6 py-3 text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for row in by_visit %}
+          <tr class="hover:bg-slate-50">
+            <td class="px-6 py-3 font-medium text-slate-700">{{ row.visit__patient__protocol__code }}</td>
+            <td class="px-6 py-3 text-slate-600">{{ row.visit__visit_type__name }}</td>
+            <td class="px-6 py-3 text-right text-slate-600">{{ row.count }}</td>
+            <td class="px-6 py-3 text-right font-semibold text-slate-900">${{ row.total|ars }} {{ row.currency }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="px-6 py-10 text-center text-sm text-slate-500">Todavía no hay gastos aprobados.</div>
+    {% endif %}
+  </div>
+
+  <!-- Actividad reciente -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="activity" class="h-4 w-4 text-primary-600"></i>
+      <h2 class="font-semibold text-slate-800">Actividad reciente</h2>
+    </div>
+    {% if recent_expenses %}
+    <div class="divide-y divide-slate-100">
+      {% for expense in recent_expenses %}
+      <a href="{% url 'expenses:detail' pk=expense.pk %}" class="px-6 py-4 flex items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-slate-800 truncate">
+            {{ expense.visit.patient }} — {{ expense.visit.visit_type.name }}
+          </p>
+          <p class="text-xs text-slate-500 truncate">
+            {{ expense.get_category_display }} — {{ expense.expense_date|date:"d/m/Y" }}
+          </p>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <span class="text-sm font-semibold text-slate-800">
+            ${{ expense.amount|ars }} {{ expense.currency }}
+          </span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+            {% if expense.status == 'approved' %}bg-green-100 text-green-700
+            {% elif expense.status == 'settled' or expense.status == 'exported' %}bg-primary-100 text-primary-700
+            {% elif expense.status == 'rejected' %}bg-red-100 text-red-700
+            {% elif expense.status == 'observed' %}bg-amber-100 text-amber-700
+            {% else %}bg-slate-100 text-slate-600{% endif %}">
+            {{ expense.get_status_display }}
+          </span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-6 py-12 text-center">
+      <i data-lucide="inbox" class="h-10 w-10 text-slate-300 mx-auto mb-3"></i>
+      <p class="text-slate-500 text-sm">No hay gastos cargados aún</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
