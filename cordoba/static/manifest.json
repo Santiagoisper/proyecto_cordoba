@@ -1,0 +1,44 @@
+{
+  "name": "Proyecto Córdoba — Viáticos Clínicos",
+  "short_name": "Córdoba",
+  "description": "Gestión de viáticos para pacientes de investigación clínica: carga de tickets con foto, OCR y aprobación.",
+  "lang": "es-AR",
+  "start_url": "/dashboard/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#001b51",
+  "theme_color": "#001b51",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Cargar ticket",
+      "url": "/expenses/new/",
+      "description": "Sacar foto de un comprobante y cargarlo"
+    },
+    {
+      "name": "Bandeja de recepción",
+      "url": "/expenses/reception/",
+      "description": "Tickets pendientes de imputación"
+    }
+  ]
+}

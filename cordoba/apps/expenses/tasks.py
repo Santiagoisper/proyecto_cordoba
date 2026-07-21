@@ -34,9 +34,10 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
         logger.error("process_ocr_for_ticket: TicketFile %s no encontrado", ticket_file_id)
         return
 
-    # Marcar como procesando
+    # Marcar como procesando y registrar el id de la tarea Celery
     ticket.ocr_status = 'processing'
-    ticket.save(update_fields=['ocr_status'])
+    ticket.ocr_task_id = self.request.id or ''
+    ticket.save(update_fields=['ocr_status', 'ocr_task_id'])
 
     expense = ticket.expense
 
@@ -57,6 +58,9 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
                 'vendor': result.vendor,
                 'cuit': result.cuit,
                 'receipt_number': result.receipt_number,
+                'currency': result.currency,
+                'iva': str(result.iva) if result.iva is not None else None,
+                'receipt_type': result.receipt_type,
             },
             'confidence': {
                 'amount': result.confidence_amount,
@@ -64,11 +68,14 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
                 'vendor': result.confidence_vendor,
                 'cuit': result.confidence_cuit,
                 'receipt': result.confidence_receipt,
+                'currency': result.confidence_currency,
+                'iva': result.confidence_iva,
             },
             'mock': result.raw_response.get('mock', False),
             'success': True,
         }
         expense.ocr_raw_data = ocr_meta
+        expense.ocr_confidence = result.global_confidence()
         expense.ocr_processed_at = timezone.now()
 
         # Pre-completar campos de alta confianza (>= 0.7)
@@ -83,7 +90,7 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
 
         expense.status = 'pending_review'
         expense.save(update_fields=[
-            'ocr_raw_data', 'ocr_processed_at', 'status',
+            'ocr_raw_data', 'ocr_confidence', 'ocr_processed_at', 'status',
             'amount', 'expense_date', 'vendor',
         ])
 
@@ -140,5 +147,6 @@ def process_ocr_for_ticket(self, ticket_file_id: int):
             )
             logger.error("OCR: máximo de reintentos alcanzado para TicketFile %s", ticket_file_id)
         else:
-            # Reintento disponible → propagar para que Celery espere y reintente
-            raise self.retry(exc=exc)
+            # Reintento disponible → backoff exponencial: 10s, 20s, 40s
+            countdown = 10 * (2 ** self.request.retries)
+            raise self.retry(exc=exc, countdown=countdown)

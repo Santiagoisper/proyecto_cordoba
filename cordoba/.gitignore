@@ -44,3 +44,6 @@ staticfiles/
 
 # macOS
 .DS_Store
+
+# Theme build
+theme/node_modules/

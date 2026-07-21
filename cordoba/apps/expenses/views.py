@@ -1,6 +1,7 @@
 import logging
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect, get_object_or_404
@@ -114,6 +115,7 @@ def _protocols_for_user(user):
     return protocols
 
 
+@transaction.atomic
 def _create_expense_from_assignment(request, form, patient, visit_type, ticket_file=None):
     visit_actual_date = form.cleaned_data.get('visit_actual_date')
     visit, created = Visit.objects.get_or_create(
@@ -607,7 +609,7 @@ def expense_correct(request, pk):
 @require_POST
 def approve_expense(request, pk):
     """Aprueba un gasto. Solo coordinadores (no admin). Retorna HTML parcial para HTMX."""
-    if not _can_approve(request.user) or (request.user.is_superuser and not request.user.is_coordinator):
+    if not request.user.is_coordinator:
         return HttpResponseForbidden("Solo los coordinadores pueden aprobar gastos.")
 
     expense = get_object_or_404(
@@ -990,90 +992,3 @@ def htmx_protocol_info(request):
     })
 
 
-@login_required
-@require_GET
-def htmx_load_patients(request):
-    """Carga dinámicamente los pacientes de un protocolo seleccionado."""
-    protocol_id = request.GET.get('protocol_id')
-    if not protocol_id:
-        return HttpResponse('<option value="">Selecciona un protocolo primero</option>')
-
-    user = request.user
-    protocol_qs = Protocol.objects.filter(pk=protocol_id, is_active=True)
-    if not user.is_superuser and not user.is_site_admin:
-        if not user.site_id:
-            return HttpResponse('<option value="">Sin acceso</option>')
-        protocol_qs = protocol_qs.filter(site_id=user.site_id)
-
-    protocol = protocol_qs.first()
-    if not protocol:
-        return HttpResponse('<option value="">Protocolo no encontrado</option>')
-
-    patients = Patient.objects.filter(
-        protocol=protocol,
-        is_active=True
-    ).order_by('patient_code').values('id', 'patient_code', 'initials')
-
-    html = '<option value="">Selecciona un paciente</option>'
-    for p in patients:
-        label = f"{p['patient_code']}"
-        if p['initials']:
-            label += f" ({p['initials']})"
-        pid = p['id']
-        html += f'<option value="{pid}">{label}</option>'
-
-    return HttpResponse(html)
-
-
-@login_required
-@require_GET
-def htmx_load_visits(request):
-    """Carga dinámicamente las visitas de un paciente y protocolo."""
-    patient_id = request.GET.get('patient_id')
-    protocol_id = request.GET.get('protocol_id')
-
-    if not patient_id or not protocol_id:
-        return HttpResponse('<option value="">Selecciona paciente y protocolo</option>')
-
-    user = request.user
-    patient = Patient.objects.select_related('protocol').filter(
-        pk=patient_id,
-        protocol_id=protocol_id,
-        is_active=True
-    ).first()
-
-    if not patient:
-        return HttpResponse('<option value="">Paciente no encontrado</option>')
-
-    # Verificar acceso del usuario al protocolo
-    if not user.is_superuser and not user.is_site_admin:
-        if patient.protocol.site_id != user.site_id:
-            return HttpResponse('<option value="">Sin acceso a este protocolo</option>')
-
-    # Cargar o crear visitas para este paciente
-    visit_types = VisitType.objects.filter(protocol=patient.protocol).order_by('order')
-    visits = Visit.objects.filter(patient=patient)
-    existing_visit_type_ids = set(visits.values_list('visit_type_id', flat=True))
-
-    html = '<option value="">Selecciona una visita</option>'
-    for vt in visit_types:
-        visit = visits.filter(visit_type_id=vt.id).first()
-        if not visit:
-            # Crear visita programada para este visit_type
-            visit = Visit.objects.create(
-                patient=patient,
-                visit_type=vt,
-                scheduled_date=timezone.now().date(),
-                created_by=user
-            )
-
-        label = f"{vt.name} ({visit.scheduled_date.strftime('%d/%m/%Y')})"
-        if visit.status != 'scheduled':
-            label += f" [{visit.get_status_display()}]"
-
-        # Marcar como deshabilitada si tiene gastos no-rechazados
-        disabled = visit.expenses.exclude(status='rejected').exists()
-        disabled_attr = ' disabled' if disabled else ''
-        html += f'<option value="{visit.id}"{disabled_attr}>{label}</option>'
-
-    return HttpResponse(html)

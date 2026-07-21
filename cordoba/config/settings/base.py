@@ -15,7 +15,7 @@ SECRET_KEY = env('SECRET_KEY', default='django-insecure-replace-in-production')
 
 DEBUG = env('DEBUG', default=False)
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 DJANGO_APPS = [
     'django.contrib.admin',
@@ -30,7 +30,6 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     'allauth',
     'allauth.account',
-    'rest_framework',
     'storages',
 ]
 
@@ -41,6 +40,7 @@ LOCAL_APPS = [
     'apps.expenses',
     'apps.reports',
     'apps.dashboard',
+    'apps.intake',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -133,6 +133,13 @@ VERYFI_CLIENT_SECRET = env('VERYFI_CLIENT_SECRET', default='')
 VERYFI_USERNAME = env('VERYFI_USERNAME', default='')
 VERYFI_API_KEY = env('VERYFI_API_KEY', default='')
 
+# ─── WhatsApp Cloud API (canal de ingesta de comprobantes) ─────────────────────
+# Sin credenciales el webhook responde pero no descarga media (modo inactivo).
+WHATSAPP_VERIFY_TOKEN = env('WHATSAPP_VERIFY_TOKEN', default='')
+WHATSAPP_APP_SECRET = env('WHATSAPP_APP_SECRET', default='')
+WHATSAPP_ACCESS_TOKEN = env('WHATSAPP_ACCESS_TOKEN', default='')
+WHATSAPP_PHONE_NUMBER_ID = env('WHATSAPP_PHONE_NUMBER_ID', default='')
+
 AUTH_USER_MODEL = 'accounts.User'
 
 SITE_ID = 1
@@ -152,11 +159,50 @@ ACCOUNT_EMAIL_VERIFICATION = 'none'
 ACCOUNT_AUTHENTICATION_METHOD = 'username'
 ACCOUNT_USERNAME_REQUIRED = True
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
+# ─── Email ────────────────────────────────────────────────────────────────────
+# En desarrollo imprime a consola; en producción configurar SMTP vía env.
+EMAIL_BACKEND = env(
+    'EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_HOST = env('EMAIL_HOST', default='')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Proyecto Córdoba <no-reply@localhost>')
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+# Operativo: INFO a consola con formato consistente; los errores de request
+# quedan en el logger django.request sin exponer stack traces al usuario.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '{levelname} {asctime} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'apps': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
 }

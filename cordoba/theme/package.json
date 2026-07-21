@@ -1,0 +1,12 @@
+{
+  "name": "cordoba-theme",
+  "private": true,
+  "description": "Build de Tailwind CSS para Proyecto Córdoba (reemplaza el CDN de desarrollo)",
+  "scripts": {
+    "build": "tailwindcss -i ./input.css -o ../static/css/app.css --minify",
+    "watch": "tailwindcss -i ./input.css -o ../static/css/app.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

@@ -42,17 +42,45 @@ def _ticket_to_base64(ticket) -> str | None:
 
 
 def _calc_totals(expenses) -> dict:
-    """Calcula totales por categoría y total general."""
-    by_category = defaultdict(Decimal)
+    """
+    Calcula totales por categoría y total general, SIEMPRE separados por moneda.
+    Nunca se suman montos de monedas distintas en un mismo total.
+
+    Estructura:
+    - by_currency: lista de bloques {currency, by_category, total} ordenada
+      por relevancia (la moneda con más gastos primero).
+    - by_category / total / currency: alias del bloque dominante, para
+      compatibilidad con templates que asumen una única moneda.
+    - mixed: True si hay más de una moneda en el conjunto.
+    """
+    per_currency: dict = {}
     for exp in expenses:
-        by_category[exp.category] += exp.amount
-    total = sum(by_category.values())
-    return {
-        'by_category': {
+        cur = exp.currency or 'ARS'
+        block = per_currency.setdefault(cur, {'by_category': defaultdict(Decimal), 'count': 0})
+        block['by_category'][exp.category] += exp.amount
+        block['count'] += 1
+
+    by_currency = []
+    for cur, block in sorted(per_currency.items(), key=lambda kv: -kv[1]['count']):
+        cats = {
             cat: {'label': CATEGORY_LABELS.get(cat, cat), 'amount': amt}
-            for cat, amt in sorted(by_category.items())
-        },
-        'total': total,
+            for cat, amt in sorted(block['by_category'].items())
+        }
+        by_currency.append({
+            'currency': cur,
+            'by_category': cats,
+            'total': sum(block['by_category'].values()),
+        })
+
+    dominant = by_currency[0] if by_currency else {
+        'currency': 'ARS', 'by_category': {}, 'total': Decimal('0'),
+    }
+    return {
+        'by_currency': by_currency,
+        'by_category': dominant['by_category'],
+        'total': dominant['total'],
+        'currency': dominant['currency'],
+        'mixed': len(by_currency) > 1,
     }
 
 
@@ -238,23 +266,32 @@ def generate_site_pdf(protocol, period, requested_by) -> bytes:
             f"No hay gastos aprobados para ningún paciente de {protocol.code} en {period.name}."
         )
 
-    # Resumen ejecutivo: totales por paciente
+    # Resumen ejecutivo: totales por paciente y moneda (una fila por combinación)
     executive_summary = []
-    grand_total = Decimal('0')
+    grand_totals_by_currency: dict = {}
     for section in patient_sections:
-        grand_total += section['totals']['total']
-        executive_summary.append({
-            'patient_code': section['patient'].patient_code,
-            'totals_by_cat': section['totals']['by_category'],
-            'total': section['totals']['total'],
-        })
+        for block in section['totals']['by_currency']:
+            executive_summary.append({
+                'patient_code': section['patient'].patient_code,
+                'currency': block['currency'],
+                'totals_by_cat': block['by_category'],
+                'total': block['total'],
+            })
+            grand_totals_by_currency[block['currency']] = (
+                grand_totals_by_currency.get(block['currency'], Decimal('0')) + block['total']
+            )
+
+    grand_totals = [
+        {'currency': cur, 'total': total}
+        for cur, total in sorted(grand_totals_by_currency.items())
+    ]
 
     context = {
         'protocol': protocol,
         'period': period,
         'patient_sections': patient_sections,
         'executive_summary': executive_summary,
-        'grand_total': grand_total,
+        'grand_totals': grand_totals,
         'generated_by': requested_by,
         'generated_at': timezone.now(),
         'report_type': 'site',
@@ -302,11 +339,12 @@ def generate_site_excel(protocol, period, requested_by) -> bytes:
     ws_summary = wb.active
     ws_summary.title = 'Resumen'
     ws_summary.column_dimensions['A'].width = 20
-    ws_summary.column_dimensions['B'].width = 16
+    ws_summary.column_dimensions['B'].width = 10
     ws_summary.column_dimensions['C'].width = 16
     ws_summary.column_dimensions['D'].width = 16
     ws_summary.column_dimensions['E'].width = 16
     ws_summary.column_dimensions['F'].width = 16
+    ws_summary.column_dimensions['G'].width = 16
 
     # Título
     ws_summary['A1'] = f'Proyecto Córdoba — Reporte Consolidado'
@@ -317,7 +355,7 @@ def generate_site_excel(protocol, period, requested_by) -> bytes:
     ws_summary['A4'].font = Font(italic=True, color='888888')
 
     ws_summary.row_dimensions[6].height = 18
-    headers = ['Paciente', 'Transporte', 'Comidas', 'Alojamiento', 'Otro', 'TOTAL']
+    headers = ['Paciente', 'Moneda', 'Transporte', 'Comidas', 'Alojamiento', 'Otro', 'TOTAL']
     for col, h in enumerate(headers, 1):
         cell = ws_summary.cell(row=6, column=col, value=h)
         style_header(cell)
@@ -325,7 +363,8 @@ def generate_site_excel(protocol, period, requested_by) -> bytes:
     patients = Patient.objects.filter(protocol=protocol, is_active=True).order_by('patient_code')
     all_expenses = []
     row_num = 7
-    grand_totals = defaultdict(Decimal)
+    # Totales generales por (moneda, categoría) — nunca se mezclan monedas.
+    grand_totals: dict = defaultdict(lambda: defaultdict(Decimal))
 
     for patient in patients:
         expenses = list(
@@ -343,34 +382,37 @@ def generate_site_excel(protocol, period, requested_by) -> bytes:
 
         all_expenses.extend(expenses)
         totals = _calc_totals(expenses)
-        row = [patient.patient_code]
+        for block in totals['by_currency']:
+            cur = block['currency']
+            row = [patient.patient_code, cur]
+            for cat in ('transport', 'meals', 'accommodation', 'other'):
+                amt = block['by_category'].get(cat, {}).get('amount', Decimal('0'))
+                grand_totals[cur][cat] += amt
+                row.append(float(amt))
+            row.append(float(block['total']))
+
+            for col, val in enumerate(row, 1):
+                cell = ws_summary.cell(row=row_num, column=col, value=val)
+                style_cell(cell)
+                if col > 2:
+                    cell.number_format = '#,##0.00'
+
+            row_num += 1
+
+    # Filas de totales generales, una por moneda
+    for cur in sorted(grand_totals):
+        grand_row = ['TOTAL GENERAL', cur]
         for cat in ('transport', 'meals', 'accommodation', 'other'):
-            amt = totals['by_category'].get(cat, {}).get('amount', Decimal('0'))
-            grand_totals[cat] += amt
-            row.append(float(amt))
-        row.append(float(totals['total']))
-
-        for col, val in enumerate(row, 1):
-            cell = ws_summary.cell(row=row_num, column=col, value=val)
-            style_cell(cell)
-            if col > 1:
-                cell.number_format = '#,##0.00'
-
-        row_num += 1
-
-    # Fila de totales
-    if row_num > 7:
-        grand_row = ['TOTAL GENERAL']
-        for cat in ('transport', 'meals', 'accommodation', 'other'):
-            grand_row.append(float(grand_totals[cat]))
-        grand_row.append(float(sum(grand_totals.values())))
+            grand_row.append(float(grand_totals[cur][cat]))
+        grand_row.append(float(sum(grand_totals[cur].values())))
         for col, val in enumerate(grand_row, 1):
             cell = ws_summary.cell(row=row_num, column=col, value=val)
             cell.font = Font(bold=True)
             cell.fill = PatternFill('solid', fgColor='DBEAFE')
             cell.border = BORDER
-            if col > 1:
+            if col > 2:
                 cell.number_format = '#,##0.00'
+        row_num += 1
 
     if not all_expenses:
         raise ValueError(
@@ -443,14 +485,17 @@ def generate_site_excel(protocol, period, requested_by) -> bytes:
                 if col_i == 7:
                     cell.number_format = '#,##0.00'
 
-        # Fila de total
+        # Filas de total, una por moneda presente en la hoja
         totals = _calc_totals(expenses)
         total_row = row_i + 1 if expenses else 5
-        ws.cell(row=total_row, column=6, value='TOTAL').font = Font(bold=True)
-        total_cell = ws.cell(row=total_row, column=7, value=float(totals['total']))
-        total_cell.font = Font(bold=True)
-        total_cell.number_format = '#,##0.00'
-        total_cell.fill = PatternFill('solid', fgColor='DBEAFE')
+        for block in totals['by_currency']:
+            ws.cell(row=total_row, column=6, value=f"TOTAL {block['currency']}").font = Font(bold=True)
+            total_cell = ws.cell(row=total_row, column=7, value=float(block['total']))
+            total_cell.font = Font(bold=True)
+            total_cell.number_format = '#,##0.00'
+            total_cell.fill = PatternFill('solid', fgColor='DBEAFE')
+            ws.cell(row=total_row, column=8, value=block['currency']).font = Font(bold=True)
+            total_row += 1
 
     # Guardar y retornar bytes
     buffer = BytesIO()

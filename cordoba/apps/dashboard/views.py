@@ -1,11 +1,30 @@
 import csv
-from django.shortcuts import render
+from decimal import Decimal, InvalidOperation
+
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.http import HttpResponse, HttpResponseForbidden
+from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 
 PENDING_STATUSES = ['ocr_pending', 'pending_review']
+
+ACTIVE_EXPENSE_STATUSES = [
+    'ocr_pending', 'pending_review', 'approved', 'observed', 'settled', 'exported'
+]
+
+VISIT_STATUS_LABELS = {
+    'scheduled': 'Programada',
+    'completed': 'Realizada',
+}
+
+COMPROBANTE_LABELS = {
+    'sin_comprobante': 'Sin comprobante',
+    'rechazado': 'Rechazado',
+    'cargado': 'Cargado',
+}
 
 
 @login_required
@@ -48,14 +67,78 @@ def _admin_context(user):
     }
 
 
+def _annotated_visits_for(user):
+    """Visitas activas anotadas con conteo de comprobantes, con scope de site."""
+    from apps.patients.models import Visit
+
+    visits_qs = (
+        Visit.objects.filter(
+            status__in=['scheduled', 'completed'],
+            patient__protocol__is_active=True,
+        )
+        .select_related('patient__protocol', 'visit_type')
+        .annotate(
+            total_expenses=Count('expenses'),
+            active_expenses=Count(
+                'expenses',
+                filter=Q(expenses__status__in=ACTIVE_EXPENSE_STATUSES),
+            ),
+        )
+        .order_by('patient__protocol__code', 'patient__patient_code', 'scheduled_date')
+    )
+
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        visits_qs = visits_qs.filter(patient__protocol__site_id=user.site_id)
+
+    return visits_qs
+
+
+def _comprobante_status(visit):
+    if visit.total_expenses == 0:
+        return 'sin_comprobante'
+    if visit.active_expenses == 0:
+        return 'rechazado'
+    return 'cargado'
+
+
 def _coordinator_context(user):
+    from datetime import timedelta
     from apps.expenses.models import Expense
     from apps.expenses.services import ExpenseValidationService
-    from apps.patients.models import Visit
-    from django.db.models import Count, Q
     from itertools import groupby
 
     today = timezone.now().date()
+
+    # ── Datos reales para gráficos (métricas por conteo: libres de moneda) ──
+    scoped_expenses = Expense.objects.all()
+    if not user.is_superuser and not user.is_site_admin and user.site_id:
+        scoped_expenses = scoped_expenses.filter(
+            visit__patient__protocol__site_id=user.site_id
+        )
+
+    chart_protocols = list(
+        scoped_expenses
+        .exclude(status='rejected')
+        .values('visit__patient__protocol__code')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:6]
+    )
+    chart_protocols = [
+        {'label': row['visit__patient__protocol__code'], 'count': row['count']}
+        for row in chart_protocols
+    ]
+
+    days = [today - timedelta(days=i) for i in range(13, -1, -1)]
+    daily_counts = dict(
+        scoped_expenses
+        .filter(created_at__date__gte=days[0])
+        .values_list('created_at__date')
+        .annotate(count=Count('id'))
+    )
+    chart_daily = [
+        {'label': d.strftime('%d/%m'), 'count': daily_counts.get(d, 0)}
+        for d in days
+    ]
 
     pending_qs = Expense.objects.filter(status='pending_review').select_related(
         'visit__patient__protocol',
@@ -82,38 +165,9 @@ def _coordinator_context(user):
             'ticket': expense.ticket_files.first(),
         })
 
-    # Seguimiento de visitas: estado de comprobante por visita
-    ACTIVE_EXPENSE_STATUSES = [
-        'ocr_pending', 'pending_review', 'approved', 'observed', 'settled', 'exported'
-    ]
-    visits_qs = (
-        Visit.objects.filter(
-            status__in=['scheduled', 'completed'],
-            patient__protocol__is_active=True,
-        )
-        .select_related('patient__protocol', 'visit_type')
-        .annotate(
-            total_expenses=Count('expenses'),
-            active_expenses=Count(
-                'expenses',
-                filter=Q(expenses__status__in=ACTIVE_EXPENSE_STATUSES),
-            ),
-        )
-        .order_by('patient__protocol__code', 'patient__patient_code', 'scheduled_date')
-    )
-
-    # Site-scope: coordinators only see visits from their own site (same rule as expenses)
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        visits_qs = visits_qs.filter(patient__protocol__site_id=user.site_id)
-
     visit_rows = []
-    for v in visits_qs:
-        if v.total_expenses == 0:
-            v.comprobante_status = 'sin_comprobante'
-        elif v.active_expenses == 0:
-            v.comprobante_status = 'rechazado'
-        else:
-            v.comprobante_status = 'cargado'
+    for v in _annotated_visits_for(user):
+        v.comprobante_status = _comprobante_status(v)
         visit_rows.append(v)
 
     visits_by_protocol = []
@@ -144,6 +198,8 @@ def _coordinator_context(user):
         'pending_with_alerts': pending_with_alerts,
         'observed_expenses': list(observed_qs[:10]),
         'visits_by_protocol': visits_by_protocol,
+        'chart_protocols': chart_protocols,
+        'chart_daily': chart_daily,
     }
 
 
@@ -176,35 +232,12 @@ def _auditor_context(user):
 
 @login_required
 def export_visits_csv(request):
+    """Exporta a CSV el seguimiento de visitas con su estado de comprobante."""
     user = request.user
     if not (user.is_superuser or user.is_site_admin or user.is_coordinator):
         return HttpResponseForbidden()
 
-    from apps.patients.models import Visit
-    from django.db.models import Count, Q
-
-    ACTIVE_EXPENSE_STATUSES = [
-        'ocr_pending', 'pending_review', 'approved', 'observed', 'settled', 'exported'
-    ]
-
-    visits_qs = (
-        Visit.objects.filter(
-            status__in=['scheduled', 'completed'],
-            patient__protocol__is_active=True,
-        )
-        .select_related('patient__protocol', 'visit_type')
-        .annotate(
-            total_expenses=Count('expenses'),
-            active_expenses=Count(
-                'expenses',
-                filter=Q(expenses__status__in=ACTIVE_EXPENSE_STATUSES),
-            ),
-        )
-        .order_by('patient__protocol__code', 'patient__patient_code', 'scheduled_date')
-    )
-
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        visits_qs = visits_qs.filter(patient__protocol__site_id=user.site_id)
+    visits_qs = _annotated_visits_for(user)
 
     protocol_filter = request.GET.get('protocol', '').strip()
     status_filter = request.GET.get('status', '').strip()
@@ -212,15 +245,36 @@ def export_visits_csv(request):
     if protocol_filter:
         visits_qs = visits_qs.filter(patient__protocol__code=protocol_filter)
 
-    VISIT_STATUS_LABELS = {
-        'scheduled': 'Programada',
-        'completed': 'Realizada',
-    }
-    COMPROBANTE_LABELS = {
-        'sin_comprobante': 'Sin comprobante',
-        'rechazado': 'Rechazado',
-        'cargado': 'Cargado',
-    }
+    rows = []
+    for v in visits_qs:
+        comprobante_status = _comprobante_status(v)
+        if status_filter and comprobante_status != status_filter:
+            continue
+        rows.append([
+            v.patient.protocol.code,
+            v.patient.patient_code,
+            v.visit_type.name,
+            v.scheduled_date.strftime('%d/%m/%Y') if v.scheduled_date else '',
+            VISIT_STATUS_LABELS.get(v.status, v.status),
+            COMPROBANTE_LABELS.get(comprobante_status, comprobante_status),
+        ])
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="visitas_comprobantes.csv"'
+    response.write('﻿')
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'Protocolo',
+        'Código paciente',
+        'Tipo de visita',
+        'Fecha programada',
+        'Estado visita',
+        'Estado comprobante',
+    ])
+    writer.writerows(rows)
+
+    return response
 
 
 @login_required
@@ -232,47 +286,42 @@ def auditor_viaticos_dashboard(request):
 
     from apps.patients.models import Patient
     from apps.protocols.models import Protocol
-    from django.db.models import Sum
 
-    # Filtros
     protocol_id = request.GET.get('protocol_id')
     search_query = request.GET.get('search', '').strip()
 
-    # Queryset base
     patients_qs = Patient.objects.select_related('protocol').filter(is_active=True)
 
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        patients_qs = patients_qs.filter(protocol__site_id=user.site_id)
+    if not user.is_superuser and not user.is_site_admin:
+        if not user.site_id:
+            patients_qs = patients_qs.none()
+        else:
+            patients_qs = patients_qs.filter(protocol__site_id=user.site_id)
 
-    if protocol_id:
+    if protocol_id and protocol_id.isdigit():
         patients_qs = patients_qs.filter(protocol_id=protocol_id)
+    else:
+        protocol_id = None
 
     if search_query:
         patients_qs = patients_qs.filter(
             Q(patient_code__icontains=search_query) | Q(initials__icontains=search_query)
         )
 
-    # Anotar con totales
-    from django.db.models import DecimalField
-    from apps.expenses.models import Expense
-
     patients_with_summary = []
     for patient in patients_qs.order_by('protocol__code', 'patient_code'):
         total_viaticos = patient.get_total_viaticos()
-        percentage = patient.get_viaticos_percentage()
-        status = patient.get_viaticos_status()
-
         patients_with_summary.append({
             'patient': patient,
             'total_viaticos': total_viaticos,
-            'remaining': float(patient.viatic_cap) - float(total_viaticos),
-            'percentage': percentage,
-            'status': status,
+            'remaining': patient.viatic_cap - Decimal(str(total_viaticos)),
+            'percentage': patient.get_viaticos_percentage(),
+            'status': patient.get_viaticos_status(),
         })
 
     protocols = Protocol.objects.filter(is_active=True).order_by('code')
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        protocols = protocols.filter(site_id=user.site_id)
+    if not user.is_superuser and not user.is_site_admin:
+        protocols = protocols.filter(site_id=user.site_id) if user.site_id else protocols.none()
 
     return render(request, 'dashboard/auditor_viaticos.html', {
         'patients_with_summary': patients_with_summary,
@@ -284,89 +333,46 @@ def auditor_viaticos_dashboard(request):
 
 
 @login_required
+@require_POST
 def update_patient_viatic_cap(request, patient_id):
     """Actualiza el tope de viáticos de un paciente (POST)."""
     from apps.patients.models import Patient
-
-    if request.method != 'POST':
-        return HttpResponseForbidden()
 
     user = request.user
     if not (user.is_superuser or user.is_site_admin or user.is_auditor):
         return HttpResponseForbidden()
 
-    patient = Patient.objects.select_related('protocol').get(pk=patient_id)
-
-    if not user.is_superuser and not user.is_site_admin and user.site_id:
-        if patient.protocol.site_id != user.site_id:
-            return HttpResponseForbidden()
+    patient_qs = Patient.objects.select_related('protocol')
+    if not user.is_superuser and not user.is_site_admin:
+        if not user.site_id:
+            patient_qs = patient_qs.none()
+        else:
+            patient_qs = patient_qs.filter(protocol__site_id=user.site_id)
+    patient = get_object_or_404(patient_qs, pk=patient_id)
 
     new_cap = request.POST.get('viatic_cap', '').strip()
     if not new_cap:
         return HttpResponse('El tope no puede estar vacío', status=400)
 
     try:
-        patient.viatic_cap = float(new_cap)
-        patient.save()
-
-        # Log audit
-        from apps.expenses.models import AuditLog
-        AuditLog.objects.create(
-            user=user,
-            action='updated',
-            content_type='Patient',
-            object_id=patient.pk,
-            object_repr=str(patient),
-            details={'field': 'viatic_cap', 'new_value': str(new_cap)},
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
-
-        return HttpResponse(f'Tope actualizado a ${new_cap}', status=200)
-    except ValueError:
+        cap_value = Decimal(new_cap)
+    except InvalidOperation:
         return HttpResponse('Tope inválido', status=400)
+    if cap_value < 0:
+        return HttpResponse('El tope no puede ser negativo', status=400)
 
-    rows = []
-    for v in visits_qs:
-        if v.total_expenses == 0:
-            comprobante_status = 'sin_comprobante'
-        elif v.active_expenses == 0:
-            comprobante_status = 'rechazado'
-        else:
-            comprobante_status = 'cargado'
+    patient.viatic_cap = cap_value
+    patient.save(update_fields=['viatic_cap'])
 
-        if status_filter and comprobante_status != status_filter:
-            continue
+    from apps.expenses.models import AuditLog
+    AuditLog.objects.create(
+        user=user,
+        action='updated',
+        content_type='Patient',
+        object_id=patient.pk,
+        object_repr=str(patient),
+        details={'field': 'viatic_cap', 'new_value': str(cap_value)},
+        ip_address=request.META.get('REMOTE_ADDR'),
+    )
 
-        rows.append({
-            'protocol_code': v.patient.protocol.code,
-            'patient_code': v.patient.patient_code,
-            'visit_type': v.visit_type.name,
-            'scheduled_date': v.scheduled_date.strftime('%d/%m/%Y') if v.scheduled_date else '',
-            'visit_status': VISIT_STATUS_LABELS.get(v.status, v.status),
-            'comprobante_status': COMPROBANTE_LABELS.get(comprobante_status, comprobante_status),
-        })
-
-    response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = 'attachment; filename="visitas_comprobantes.csv"'
-    response.write('\ufeff')
-
-    writer = csv.writer(response)
-    writer.writerow([
-        'Protocolo',
-        'Código paciente',
-        'Tipo de visita',
-        'Fecha programada',
-        'Estado visita',
-        'Estado comprobante',
-    ])
-    for row in rows:
-        writer.writerow([
-            row['protocol_code'],
-            row['patient_code'],
-            row['visit_type'],
-            row['scheduled_date'],
-            row['visit_status'],
-            row['comprobante_status'],
-        ])
-
-    return response
+    return HttpResponse(f'Tope actualizado a ${cap_value}', status=200)

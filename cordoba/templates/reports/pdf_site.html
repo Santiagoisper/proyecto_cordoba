@@ -9,10 +9,10 @@
       margin: 2cm 1.5cm 2.5cm 1.5cm;
       @frame footer_frame {
         -pdf-frame-border: 0;
-        bottom: 0.4cm;
+        bottom: 0.3cm;
         left: 0cm;
         right: 0cm;
-        height: 0.8cm;
+        height: 1.6cm;
       }
     }
 
@@ -67,7 +67,7 @@
     <div class="header-row">
       <div class="header-left">
         <p class="header-title">Reporte Consolidado del Site</p>
-        <p class="header-subtitle">Proyecto Córdoba — CINME / Innova Trials</p>
+        <p class="header-subtitle">Proyecto Córdoba · CINME / Innova Trials</p>
       </div>
       <div class="header-right">
         Generado: {{ generated_at|date:"d/m/Y H:i" }} UTC<br>
@@ -77,25 +77,26 @@
   </div>
 
   <div class="confidential">
-    <strong>DOCUMENTO CONFIDENCIAL GCP/ANMAT</strong> — Información de ensayo clínico. Distribución restringida.
-    Solo código de paciente — nunca nombre real.
+    <strong>DOCUMENTO CONFIDENCIAL GCP/ANMAT</strong> · Información de ensayo clínico. Distribución restringida.
+    Solo código de paciente · nunca nombre real.
   </div>
 
   <table class="meta-table">
-    <tr><td>Protocolo</td><td>{{ protocol.code }} — {{ protocol.name }}</td></tr>
+    <tr><td>Protocolo</td><td>{{ protocol.code }} · {{ protocol.name }}</td></tr>
     <tr><td>Sponsor</td><td>{{ protocol.sponsor|default:"—" }}</td></tr>
     <tr><td>Fase</td><td>{{ protocol.phase|default:"—" }}</td></tr>
-    <tr><td>Período</td><td>{{ period.name }} ({{ period.date_from|date:"d/m/Y" }} — {{ period.date_to|date:"d/m/Y" }})</td></tr>
+    <tr><td>Período</td><td>{{ period.name }} ({{ period.date_from|date:"d/m/Y" }} · {{ period.date_to|date:"d/m/Y" }})</td></tr>
     <tr><td>Pacientes con gastos</td><td>{{ patient_sections|length }}</td></tr>
   </table>
 
   <!-- Resumen ejecutivo -->
-  <div class="section-title">Resumen ejecutivo — Totales por paciente</div>
+  <div class="section-title">Resumen ejecutivo · Totales por paciente</div>
 
   <table class="summary-table">
     <thead>
       <tr>
         <th>Paciente</th>
+        <th>Moneda</th>
         <th>Transporte</th>
         <th>Comidas</th>
         <th>Alojamiento</th>
@@ -107,6 +108,7 @@
       {% for row in executive_summary %}
       <tr>
         <td>{{ row.patient_code }}</td>
+        <td>{{ row.currency }}</td>
         <td>${{ row.totals_by_cat.transport.amount|default:"0.00"|ars }}</td>
         <td>${{ row.totals_by_cat.meals.amount|default:"0.00"|ars }}</td>
         <td>${{ row.totals_by_cat.accommodation.amount|default:"0.00"|ars }}</td>
@@ -114,11 +116,14 @@
         <td>${{ row.total|ars }}</td>
       </tr>
       {% endfor %}
+      {% for gt in grand_totals %}
       <tr class="grand-total">
-        <td>TOTAL GENERAL</td>
+        <td>TOTAL {{ gt.currency }}</td>
+        <td>{{ gt.currency }}</td>
         <td colspan="4"></td>
-        <td>${{ grand_total|ars }}</td>
+        <td>${{ gt.total|ars }}</td>
       </tr>
+      {% endfor %}
     </tbody>
   </table>
 
@@ -129,11 +134,11 @@
   <div class="header">
     <div class="header-row">
       <div class="header-left">
-        <p class="header-title">Detalle — Paciente {{ section.patient.patient_code }}</p>
-        <p class="header-subtitle">{{ protocol.code }} — {{ period.name }}</p>
+        <p class="header-title">Detalle · Paciente {{ section.patient.patient_code }}</p>
+        <p class="header-subtitle">{{ protocol.code }} · {{ period.name }}</p>
       </div>
       <div class="header-right">
-        Página de detalle — Confidencial GCP/ANMAT
+        Página de detalle · Confidencial GCP/ANMAT
       </div>
     </div>
   </div>
@@ -172,11 +177,13 @@
       </tr>
       {% endwith %}
       {% endfor %}
+      {% for block in section.totals.by_currency %}
       <tr class="patient-total-row">
-        <td colspan="6" style="text-align:right;">SUBTOTAL {{ section.patient.patient_code }}</td>
-        <td class="amount">${{ section.totals.total|ars }}</td>
+        <td colspan="6" style="text-align:right;">SUBTOTAL {{ section.patient.patient_code }} ({{ block.currency }})</td>
+        <td class="amount">${{ block.total|ars }} {{ block.currency }}</td>
         <td></td>
       </tr>
+      {% endfor %}
     </tbody>
   </table>
 
@@ -184,9 +191,9 @@
 
   <!-- Footer con número de página (xhtml2pdf: -pdf-frame-content) -->
   <div style="-pdf-frame-content: footer_frame; text-align: center; font-size: 8pt; color: #94A3B8;">
-    Proyecto Córdoba v1.0 — Confidencial GCP/ANMAT —
-    Gastos con estado Aprobado, Liquidado o Exportado —
-    Generado {{ generated_at|date:"d/m/Y H:i" }} UTC por {{ generated_by.get_full_name|default:generated_by.username }} —
+    Proyecto Córdoba v1.0 · Confidencial GCP/ANMAT ·
+    Gastos con estado Aprobado, Liquidado o Exportado ·
+    Generado {{ generated_at|date:"d/m/Y H:i" }} UTC por {{ generated_by.get_full_name|default:generated_by.username }} ·
     Página <pdf:pagenumber/> de <pdf:pagecount/>
   </div>
 

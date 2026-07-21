@@ -13,97 +13,92 @@
         Bienvenido, {{ user.get_full_name|default:user.username }}
       </h1>
     </div>
-    <p class="text-slate-600 text-sm mt-2">Panel de Coordinación · Investigación Clínica</p>
+    <p class="text-slate-600 text-sm mt-2">Panel de coordinación · Investigación clínica</p>
     <p class="text-slate-500 text-xs mt-1"><a href="{% url 'expenses:list' %}" class="text-primary-600 hover:text-primary-800 font-medium">Ver todos los gastos</a></p>
   </div>
 
-  <!-- Dashboard de métricas con gráficos animados -->
-  {% if total_spent or pending_count %}
+  <!-- Dashboard de métricas con datos reales del site -->
+  {% if chart_protocols %}
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-    <!-- Gráfico: Viáticos por protocolo -->
+    <!-- Gráfico: comprobantes por protocolo -->
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
       <div class="flex items-center gap-2 mb-4">
         <i data-lucide="pie-chart" class="h-5 w-5 text-primary-600"></i>
-        <h3 class="font-semibold text-slate-900">Gastos por Protocolo</h3>
+        <h3 class="font-semibold text-slate-900">Comprobantes por protocolo</h3>
       </div>
       <canvas id="chartProtocolos" class="max-h-64"></canvas>
     </div>
 
-    <!-- Gráfico: Tendencia semanal -->
+    <!-- Gráfico: comprobantes cargados por día (últimos 14 días) -->
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
       <div class="flex items-center gap-2 mb-4">
-        <i data-lucide="trend-up" class="h-5 w-5 text-secondary-600"></i>
-        <h3 class="font-semibold text-slate-900">Tendencia de Gastos</h3>
+        <i data-lucide="trending-up" class="h-5 w-5 text-secondary-600"></i>
+        <h3 class="font-semibold text-slate-900">Carga diaria (14 días)</h3>
       </div>
       <canvas id="chartTendencia" class="max-h-64"></canvas>
     </div>
   </div>
 
+  {{ chart_protocols|json_script:"chart-protocols-data" }}
+  {{ chart_daily|json_script:"chart-daily-data" }}
   <script>
-    // Gráfico de Protocolos (Doughnut)
-    const ctxProtocolos = document.getElementById('chartProtocolos').getContext('2d');
-    new Chart(ctxProtocolos, {
-      type: 'doughnut',
-      data: {
-        labels: ['Protocolo A', 'Protocolo B', 'Protocolo C'],
-        datasets: [{
-          data: [30, 25, 45],
-          backgroundColor: ['#0051c4', '#00a556', '#b8a99a'],
-          borderColor: '#fff',
-          borderWidth: 2,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: { font: { size: 12 }, padding: 15 }
-          }
-        },
-        animation: {
-          duration: 2000,
-          easing: 'easeInOutQuart'
-        }
-      }
-    });
+    (function () {
+      const protocolRows = JSON.parse(document.getElementById('chart-protocols-data').textContent);
+      const dailyRows = JSON.parse(document.getElementById('chart-daily-data').textContent);
+      const PALETTE = ['#0051c4', '#00a556', '#b8a99a', '#83b5ff', '#4ade80', '#9d8f85'];
 
-    // Gráfico de Tendencia (Line)
-    const ctxTendencia = document.getElementById('chartTendencia').getContext('2d');
-    new Chart(ctxTendencia, {
-      type: 'line',
-      data: {
-        labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sab', 'Dom'],
-        datasets: [{
-          label: 'Gastos ($)',
-          data: [1200, 1900, 1500, 2200, 2800, 1600, 1400],
-          borderColor: '#00a556',
-          backgroundColor: 'rgba(0, 165, 86, 0.1)',
-          borderWidth: 2.5,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 5,
-          pointBackgroundColor: '#00a556',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: { labels: { font: { size: 12 } } }
+      new Chart(document.getElementById('chartProtocolos').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: protocolRows.map(r => r.label),
+          datasets: [{
+            data: protocolRows.map(r => r.count),
+            backgroundColor: PALETTE.slice(0, protocolRows.length),
+            borderColor: '#fff',
+            borderWidth: 2,
+          }]
         },
-        scales: {
-          y: { beginAtZero: true }
-        },
-        animation: {
-          duration: 2000,
-          easing: 'easeInOutQuart'
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 15 } }
+          },
+          animation: { duration: 1200, easing: 'easeInOutQuart' }
         }
-      }
-    });
+      });
+
+      new Chart(document.getElementById('chartTendencia').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: dailyRows.map(r => r.label),
+          datasets: [{
+            label: 'Comprobantes cargados',
+            data: dailyRows.map(r => r.count),
+            borderColor: '#00a556',
+            backgroundColor: 'rgba(0, 165, 86, 0.1)',
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#00a556',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { labels: { font: { size: 12 } } }
+          },
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } }
+          },
+          animation: { duration: 1200, easing: 'easeInOutQuart' }
+        }
+      });
+    })();
   </script>
   {% endif %}
 

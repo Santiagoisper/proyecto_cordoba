@@ -1012,3 +1012,84 @@ class VisitActualDateTest(BaseExpenseTestCase):
         self.assertEqual(resp.status_code, 302)
         visit = Visit.objects.get(patient=self.patient, visit_type=self.visit_type_date)
         self.assertEqual(visit.actual_date, date(2025, 4, 1))
+
+
+# ─── Parser Veryfi (sin red) ──────────────────────────────────────────────────
+
+class OCRVeryfiParsingTests(TestCase):
+    """Tests del parser de respuestas Veryfi: moneda, IVA, tipo y confianza."""
+
+    def setUp(self):
+        from .services import OCRService
+        self.svc = OCRService()
+
+    def test_parse_full_response(self):
+        data = {
+            'total': 40200.50,
+            'date': '2025-03-10',
+            'vendor': {'name': 'Taxi Aeropuerto SRL'},
+            'invoice_number': '0001-00012345',
+            'currency_code': 'ars',
+            'tax': 6980.55,
+            'document_type': 'receipt',
+        }
+        result = self.svc._parse_veryfi_response(data)
+        self.assertEqual(result.amount, Decimal('40200.50'))
+        self.assertEqual(result.expense_date, date(2025, 3, 10))
+        self.assertEqual(result.vendor, 'Taxi Aeropuerto SRL')
+        self.assertEqual(result.currency, 'ARS')
+        self.assertEqual(result.iva, Decimal('6980.55'))
+        self.assertEqual(result.receipt_type, 'receipt')
+        self.assertEqual(result.receipt_number, '0001-00012345')
+        self.assertGreater(result.confidence_currency, 0)
+        self.assertGreater(result.confidence_iva, 0)
+
+    def test_parse_minimal_response(self):
+        result = self.svc._parse_veryfi_response({})
+        self.assertIsNone(result.amount)
+        self.assertIsNone(result.currency)
+        self.assertIsNone(result.iva)
+        self.assertIsNone(result.global_confidence())
+
+    def test_parse_invalid_currency_ignored(self):
+        result = self.svc._parse_veryfi_response({'currency_code': 'PESOS'})
+        self.assertIsNone(result.currency)
+
+    def test_global_confidence_averages_only_extracted(self):
+        data = {'total': 100, 'currency_code': 'USD'}
+        result = self.svc._parse_veryfi_response(data)
+        # amount 0.9 y currency 0.8 → promedio 0.85
+        self.assertAlmostEqual(result.global_confidence(), 0.85, places=2)
+
+    def test_normalize_argentine_format(self):
+        self.assertEqual(self.svc._normalize_amount('40.200,50'), '40200.50')
+
+    def test_normalize_american_format(self):
+        self.assertEqual(self.svc._normalize_amount('40,200.50'), '40200.50')
+
+    def test_normalize_thousands_only(self):
+        self.assertEqual(self.svc._normalize_amount('40.200'), '40200')
+
+
+class TicketFileValidatorTests(TestCase):
+    """Validación server-side de archivos de ticket."""
+
+    def test_accepts_jpeg(self):
+        from .validators import validate_ticket_file
+        f = SimpleUploadedFile('ticket.jpg', b'x' * 1024, content_type='image/jpeg')
+        validate_ticket_file(f)  # no debe levantar
+
+    def test_rejects_oversize(self):
+        from django.core.exceptions import ValidationError
+        from .validators import validate_ticket_file, MAX_TICKET_SIZE_BYTES
+        f = SimpleUploadedFile('ticket.jpg', b'x', content_type='image/jpeg')
+        f.size = MAX_TICKET_SIZE_BYTES + 1
+        with self.assertRaises(ValidationError):
+            validate_ticket_file(f)
+
+    def test_rejects_executable(self):
+        from django.core.exceptions import ValidationError
+        from .validators import validate_ticket_file
+        f = SimpleUploadedFile('malware.exe', b'MZ', content_type='application/x-msdownload')
+        with self.assertRaises(ValidationError):
+            validate_ticket_file(f)

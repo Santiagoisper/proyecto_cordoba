@@ -1,6 +1,7 @@
 from django import forms
 from django.utils import timezone
 from .models import Expense, TicketFile, ReceptionTicket
+from .validators import validate_ticket_file
 
 _INPUT = 'w-full px-3 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent'
 _TEXTAREA = _INPUT + ' resize-none'
@@ -37,6 +38,7 @@ class ExpenseCreateForm(forms.Form):
             'id': 'ticket-file-input',
         }),
         required=True,
+        validators=[validate_ticket_file],
     )
     description = forms.CharField(
         label='Descripción (opcional)',
@@ -124,6 +126,11 @@ class ObservedCorrectionForm(forms.ModelForm):
 
 class ReceptionTicketUploadForm(forms.ModelForm):
     """Carga rápida de comprobante en recepción, sin imputación clínica."""
+
+    def clean_file(self):
+        uploaded = self.cleaned_data['file']
+        validate_ticket_file(uploaded)
+        return uploaded
 
     class Meta:
         model = ReceptionTicket

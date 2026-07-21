@@ -34,16 +34,33 @@ class OCRResult:
     vendor: Optional[str] = None
     cuit: Optional[str] = None
     receipt_number: Optional[str] = None
+    currency: Optional[str] = None
+    iva: Optional[Decimal] = None
+    receipt_type: Optional[str] = None
 
     confidence_amount: float = 0.0
     confidence_date: float = 0.0
     confidence_vendor: float = 0.0
     confidence_cuit: float = 0.0
     confidence_receipt: float = 0.0
+    confidence_currency: float = 0.0
+    confidence_iva: float = 0.0
 
     raw_response: dict = field(default_factory=dict)
     success: bool = True
     error_message: str = ''
+
+    def global_confidence(self) -> Optional[float]:
+        """Promedio de las confianzas de los campos efectivamente extraídos."""
+        values = [
+            c for c in (
+                self.confidence_amount, self.confidence_date, self.confidence_vendor,
+                self.confidence_cuit, self.confidence_receipt, self.confidence_currency,
+            ) if c > 0
+        ]
+        if not values:
+            return None
+        return round(sum(values) / len(values), 3)
 
 
 class OCRService:
@@ -196,6 +213,27 @@ class OCRService:
         if invoice_number:
             result.receipt_number = str(invoice_number)
             result.confidence_receipt = 0.7
+
+        # Moneda del comprobante (ISO 4217) según Veryfi
+        currency_code = data.get('currency_code')
+        if currency_code and isinstance(currency_code, str) and len(currency_code) == 3:
+            result.currency = currency_code.upper()
+            result.confidence_currency = 0.8
+
+        # IVA / impuestos del comprobante
+        tax = data.get('tax')
+        if tax is not None:
+            try:
+                result.iva = Decimal(self._normalize_amount(str(tax).strip()))
+                result.confidence_iva = 0.7
+            except InvalidOperation:
+                pass
+
+        # Tipo de documento (ticket, factura, etc.)
+        document_type = data.get('document_type') or data.get('document_reference_number')
+        if document_type and isinstance(document_type, str):
+            result.receipt_type = document_type
+
         result.success = True
         return result
 
@@ -245,11 +283,15 @@ class ExpenseValidationService:
                     ),
                 )]
         except Exception:
-            pass
+            logger.exception("Validación date_window falló para Expense %s", expense.pk)
         return []
 
     def _check_amount_cap(self, expense) -> List[ValidationAlert]:
-        """Valida que el monto no supere el tope diario de la categoría."""
+        """
+        Valida que el monto no supere el tope diario de la categoría.
+        Los topes están expresados en la moneda del protocolo: solo se comparan
+        contra tickets cargados en esa misma moneda.
+        """
         try:
             protocol = expense.visit.patient.protocol
             cap = None
@@ -260,7 +302,21 @@ class ExpenseValidationService:
             elif expense.category == 'accommodation':
                 cap = protocol.max_daily_accommodation
 
-            if cap is not None and expense.amount > cap:
+            if cap is None:
+                return []
+
+            if expense.currency != protocol.currency:
+                return [ValidationAlert(
+                    level='warning',
+                    code='cap_currency_mismatch',
+                    message=(
+                        f'Hay tope diario en {protocol.currency} para '
+                        f'{expense.get_category_display()}, pero el ticket está en '
+                        f'{expense.currency}: revisar manualmente.'
+                    ),
+                )]
+
+            if expense.amount > cap:
                 return [ValidationAlert(
                     level='error',
                     code='amount_exceeds_cap',
@@ -270,7 +326,7 @@ class ExpenseValidationService:
                     ),
                 )]
         except Exception:
-            pass
+            logger.exception("Validación amount_cap falló para Expense %s", expense.pk)
         return []
 
     def _check_duplicate(self, expense) -> List[ValidationAlert]:
@@ -301,7 +357,7 @@ class ExpenseValidationService:
                     ),
                 )]
         except Exception:
-            pass
+            logger.exception("Validación duplicate falló para Expense %s", expense.pk)
         return []
 
     def _check_budget_usd(self, expense) -> List[ValidationAlert]:
@@ -354,7 +410,7 @@ class ExpenseValidationService:
                     ),
                 )]
         except Exception:
-            pass
+            logger.exception("Validación budget_usd falló para Expense %s", expense.pk)
         return []
 
 

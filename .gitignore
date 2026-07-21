@@ -49,3 +49,6 @@ Thumbs.db
 .local/
 
 .vercel
+
+# Nested clone (backup local, nunca commitear)
+Fable5/

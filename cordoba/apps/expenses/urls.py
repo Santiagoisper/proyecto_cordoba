@@ -27,6 +27,4 @@ urlpatterns = [
     path('htmx/patients/', views.htmx_patients_for_protocol, name='htmx_patients'),
     path('htmx/visits/', views.htmx_visits_for_patient, name='htmx_visits'),
     path('htmx/protocol-info/', views.htmx_protocol_info, name='htmx_protocol_info'),
-    path('htmx/load-patients/', views.htmx_load_patients, name='htmx_load_patients'),
-    path('htmx/load-visits/', views.htmx_load_visits, name='htmx_load_visits'),
 ]

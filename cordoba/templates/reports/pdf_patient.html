@@ -9,10 +9,10 @@
       margin: 2cm 1.5cm 2.5cm 1.5cm;
       @frame footer_frame {
         -pdf-frame-border: 0;
-        bottom: 0.4cm;
+        bottom: 0.3cm;
         left: 0cm;
         right: 0cm;
-        height: 0.8cm;
+        height: 1.6cm;
       }
     }
 
@@ -59,7 +59,7 @@
     .viaticos-label { display: table-cell; width: 50%; }
     .viaticos-value { display: table-cell; text-align: right; font-weight: bold; font-family: monospace; }
     .viaticos-progress { background: #E0F2FE; border-radius: 3pt; height: 12pt; overflow: hidden; margin: 6pt 0; }
-    .viaticos-bar { background: #0EA5E9; height: 100%; transition: width 0.3s; }
+    .viaticos-bar { background: #0EA5E9; height: 100%; }
     .viaticos-bar.warning { background: #F59E0B; }
     .viaticos-bar.danger { background: #EF4444; }
 
@@ -82,7 +82,7 @@
     <div class="header-row">
       <div class="header-left">
         <p class="header-title">Rendición de Viáticos</p>
-        <p class="header-subtitle">Proyecto Córdoba — CINME / Innova Trials</p>
+        <p class="header-subtitle">Proyecto Córdoba · CINME / Innova Trials</p>
       </div>
       <div class="header-right">
         Generado: {{ generated_at|date:"d/m/Y H:i" }} UTC<br>
@@ -93,17 +93,17 @@
 
   <!-- Aviso de confidencialidad -->
   <div class="confidential">
-    <strong>DOCUMENTO CONFIDENCIAL GCP/ANMAT</strong> — Este documento contiene información de un ensayo clínico.
-    Distribución restringida. Solo código de paciente — nunca nombre real.
+    <strong>DOCUMENTO CONFIDENCIAL GCP/ANMAT</strong> · Este documento contiene información de un ensayo clínico.
+    Distribución restringida. Solo código de paciente · nunca nombre real.
   </div>
 
   <!-- Metadatos -->
   <table class="meta-table">
-    <tr><td>Protocolo</td><td>{{ protocol.code }} — {{ protocol.name }}</td></tr>
+    <tr><td>Protocolo</td><td>{{ protocol.code }} · {{ protocol.name }}</td></tr>
     <tr><td>Sponsor</td><td>{{ protocol.sponsor|default:"—" }}</td></tr>
     <tr><td>Fase</td><td>{{ protocol.phase|default:"—" }}</td></tr>
     <tr><td>Código de paciente</td><td><strong>{{ patient.patient_code }}</strong></td></tr>
-    <tr><td>Período</td><td>{{ period.name }} ({{ period.date_from|date:"d/m/Y" }} — {{ period.date_to|date:"d/m/Y" }})</td></tr>
+    <tr><td>Período</td><td>{{ period.name }} ({{ period.date_from|date:"d/m/Y" }} · {{ period.date_to|date:"d/m/Y" }})</td></tr>
   </table>
 
   <!-- Información de viáticos -->
@@ -185,16 +185,18 @@
   <div class="section-title">Resumen por categoría</div>
 
   <table class="totals-table">
-    {% for cat_key, cat_data in totals.by_category.items %}
+    {% for block in totals.by_currency %}
+    {% for cat_key, cat_data in block.by_category.items %}
     <tr>
-      <td>{{ cat_data.label }}</td>
-      <td>${{ cat_data.amount|ars }}</td>
+      <td>{{ cat_data.label }} ({{ block.currency }})</td>
+      <td>${{ cat_data.amount|ars }} {{ block.currency }}</td>
     </tr>
     {% endfor %}
     <tr class="grand-total">
-      <td>TOTAL GENERAL</td>
-      <td>${{ totals.total|ars }}</td>
+      <td>TOTAL {{ block.currency }}</td>
+      <td>${{ block.total|ars }} {{ block.currency }}</td>
     </tr>
+    {% endfor %}
   </table>
 
   <!-- Anexo: Galería de tickets -->
@@ -207,8 +209,8 @@
       <div class="gallery-item">
         <img src="{{ item.ticket_b64 }}" alt="Ticket {{ item.date }}" />
         <div class="gallery-item-label">
-          {{ item.date|date:"d/m/Y" }} — {{ item.vendor|truncatewords:3 }}<br>
-          {{ item.category|upper }} — ${{ item.amount|ars }} {{ item.currency }}
+          {{ item.date|date:"d/m/Y" }} · {{ item.vendor|truncatewords:3 }}<br>
+          {{ item.category|upper }} · ${{ item.amount|ars }} {{ item.currency }}
         </div>
       </div>
       {% endif %}
@@ -219,9 +221,9 @@
 
   <!-- Footer con número de página (xhtml2pdf: -pdf-frame-content) -->
   <div style="-pdf-frame-content: footer_frame; text-align: center; font-size: 8pt; color: #94A3B8;">
-    Proyecto Córdoba v1.0 — Confidencial GCP/ANMAT —
-    Gastos con estado Aprobado, Liquidado o Exportado —
-    Generado {{ generated_at|date:"d/m/Y H:i" }} UTC por {{ generated_by.get_full_name|default:generated_by.username }} —
+    Proyecto Córdoba v1.0 · Confidencial GCP/ANMAT ·
+    Gastos con estado Aprobado, Liquidado o Exportado ·
+    Generado {{ generated_at|date:"d/m/Y H:i" }} UTC por {{ generated_by.get_full_name|default:generated_by.username }} ·
     Página <pdf:pagenumber/> de <pdf:pagecount/>
   </div>
 

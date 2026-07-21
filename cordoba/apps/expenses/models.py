@@ -171,6 +171,11 @@ class Expense(models.Model):
         ordering = ['-expense_date', '-created_at']
         verbose_name = 'Gasto'
         verbose_name_plural = 'Gastos'
+        indexes = [
+            models.Index(fields=['status'], name='expense_status_idx'),
+            models.Index(fields=['expense_date'], name='expense_date_idx'),
+            models.Index(fields=['status', 'expense_date'], name='expense_status_date_idx'),
+        ]
 
     def __str__(self):
         return (
@@ -323,6 +328,7 @@ class AuditLog(models.Model):
         ('observed', 'Observado'),
         ('corrected', 'Corregido'),
         ('exported', 'Exportado'),
+        ('sent_to_coordinator', 'Enviado al coordinador'),
         ('ocr_completed', 'OCR completado'),
         ('ocr_failed', 'OCR fallido'),
         ('period_closed', 'Período cerrado'),
@@ -355,6 +361,19 @@ class AuditLog(models.Model):
         ordering = ['-timestamp']
         verbose_name = 'Registro de auditoría'
         verbose_name_plural = 'Registros de auditoría'
+        indexes = [
+            models.Index(fields=['content_type', 'object_id'], name='auditlog_object_idx'),
+            models.Index(fields=['timestamp'], name='auditlog_timestamp_idx'),
+        ]
 
     def __str__(self):
         return f"{self.timestamp:%Y-%m-%d %H:%M} — {self.user} — {self.get_action_display()}"
+
+    def save(self, *args, **kwargs):
+        # Inmutabilidad Part 11: solo se permiten inserciones, nunca updates.
+        if self.pk is not None:
+            raise PermissionError("AuditLog es inmutable: no se permiten modificaciones.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError("AuditLog es inmutable: no se permiten borrados.")
